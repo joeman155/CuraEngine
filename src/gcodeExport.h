@@ -114,7 +114,11 @@ private:
     std::ostream* output_stream;
     std::string new_line;
 
+    int    extrusion_activity;   // Records what activity we are in.
+    int    extruding;       // Are we? (1) or are we not (0) extruding...
+    int    dist_remaining; 
     double current_e_value; //!< The last E value written to gcode (in mm or mm^3)
+    double current_e_value_abs; // This is like current_e_value, EXCEPT that it isn't reset when current_e_value is reset.
 
     // flow-rate compensation
     double current_e_offset; //!< Offset to compensate for flow rate (mm or mm^3)
@@ -342,7 +346,8 @@ public:
      * \param feature the feature that's currently printing
      * \param update_extrusion_offset whether to update the extrusion offset to match the current flow rate
      */
-    void writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset = false);
+    void writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset = false, int distance_remaining = -1, int last_move = 0);
+
 
     /*!
      * Go to a X/Y location with the z-hopped Z value
@@ -365,7 +370,7 @@ public:
      * \param feature the feature that's currently printing
      * \param update_extrusion_offset whether to update the extrusion offset to match the current flow rate
      */
-    void writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset = false);
+    void writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset = false, int distance_remaining = -1, int last_move = 0);
 private:
     /*!
      * Coordinates are build plate coordinates, which might be offsetted when extruder offsets are encoded in the gcode.
@@ -391,7 +396,7 @@ private:
      * \param feature the print feature that's currently printing
      * \param update_extrusion_offset whether to update the extrusion offset to match the current flow rate
      */
-    void writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset = false);
+    void writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset = false, int distance_remaining = -1, int last_move = 0);
 
     /*!
      * Write the F, X, Y, Z and E value (if they are not different from the last)
@@ -405,6 +410,32 @@ private:
      */
     void writeFXYZE(const Velocity& speed, const int x, const int y, const int z, const double e, const PrintFeatureType& feature);
 
+
+
+   /*!
+     * Write the F, X, Y, Z and E value (if they are not different from the last)
+     *
+     * Written to do the actual dirty work... the calling routine writeFXYZE calls this... 
+     *
+     * Created because printers have MAX extrusion amounts in ONE command and we may need to split this up
+     * HEnce the birth of this funcion.
+     */
+    void writeFXYZEpart(const Velocity& speed, const int x, const int y, const int z, const double e, const PrintFeatureType& feature);
+
+
+
+    /*!
+     * Write the F and E value (if they are not different from the last)
+     *
+     * convenience function called from writeExtrusion. It was written to generate minimal lines for when there is Extruder latency
+     *
+     * This function also applies the gcode offset by calling \ref GCodeExport::getGcodePos
+     * This function updates the \ref GCodeExport::total_bounding_box
+     * It estimates the time in \ref GCodeExport::estimateCalculator for the correct feature
+     * It updates \ref GCodeExport::currentPosition, \ref GCodeExport::current_e_value and \ref GCodeExport::currentSpeed
+     */
+    void writeFE(const Velocity& speed, const double e, const PrintFeatureType& feature);
+
     /*!
      * The writeTravel and/or writeExtrusion when flavor == BFB
      * \param x build plate x
@@ -415,6 +446,23 @@ private:
      * \param feature print feature to track print time for
      */
     void writeMoveBFB(const int x, const int y, const int z, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature);
+
+
+    /*!
+     * For Metal 3-D printer, we must have Auger and Stepper Motor in a position that allows them to dis-engage when 
+     * returning the Auger back to the station
+     * This code handles this.
+     */
+    void disEngageMotor();
+
+
+    /*!
+     * We need to rotate the stepper motor to engage it with the Auger. Needs to be primed.
+     *
+     */
+    void primeExtruder(double prime_amount);
+
+
 public:
     /*!
      * Get ready for extrusion moves:
@@ -453,18 +501,32 @@ public:
     void startExtruder(const size_t new_extruder);
 
     /*!
-     * Switch to the new_extruder: 
+     * Finish with extruder - Run at END of print job.
+     * - perform neccessary retractions
+     * - fiddle with E-values
+     * - write extruder end gcode
+     * 
+     * \param retraction_config_old_extruder The extruder switch retraction config of the old extruder, to perform the extruder switch retraction with.
+     * \param perform_z_hop The amount by which the print head should be z hopped during extruder switch, or zero if it should not z hop.
+     */
+    // void finishExtruder(const RetractionConfig& retraction_config_old_extruder, coord_t perform_z_hop = 0);
+    void finishExtruder();
+
+
+    /*!
+     * Switch to the new_extruder:
      * - perform neccessary retractions
      * - fiddle with E-values
      * - write extruder end gcode
      * - set new extruder
      * - write extruder start gcode
-     * 
+     *
      * \param new_extruder The extruder to switch to
      * \param retraction_config_old_extruder The extruder switch retraction config of the old extruder, to perform the extruder switch retraction with.
      * \param perform_z_hop The amount by which the print head should be z hopped during extruder switch, or zero if it should not z hop.
      */
     void switchExtruder(size_t new_extruder, const RetractionConfig& retraction_config_old_extruder, coord_t perform_z_hop = 0);
+
 
     void writeCode(const char* str);
     

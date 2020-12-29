@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iomanip>
 #include <stdarg.h>
+#include <algorithm>
 
 #include "Application.h" //To send layer view data.
 #include "ExtruderTrain.h"
@@ -14,6 +15,7 @@
 #include "Slice.h"
 #include "communication/Communication.h" //To send layer view data.
 #include "settings/types/LayerIndex.h"
+#include "settings/types/Ratio.h"
 #include "utils/Date.h"
 #include "utils/logoutput.h"
 #include "utils/string.h" // MMtoStream, PrecisionedDouble
@@ -41,7 +43,14 @@ GCodeExport::GCodeExport()
 {
     *output_stream << std::fixed;
 
+    dist_remaining = 0; // Track distance remaining (LATENCY CODE)
+    extruding = 0;      // If 0, it means we are not extruding, if 1, it means we are extruding
+                        // This is used to determine when we should consider our latency operations
+                        // Latency operations are when we are STARTING, or when we are STOPPING. (LATENCY CODE)
+    extrusion_activity = 0; // No activity 1 = Starting extruding, 2 = Finishing extruding.  (LATENCY CODE)
+                        //
     current_e_value = 0;
+    current_e_value_abs = 0;
     current_extruder = 0;
     current_fan_speed = -1;
 
@@ -611,9 +620,9 @@ void GCodeExport::writeTravel(const Point& p, const Velocity& speed)
 {
     writeTravel(Point3(p.X, p.Y, current_layer_z), speed);
 }
-void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset)
+void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int distance_remaining, int last_move)
 {
-    writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset);
+    writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, distance_remaining, last_move);
 }
 
 void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
@@ -626,14 +635,14 @@ void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
     writeTravel(p.x, p.y, p.z + is_z_hopped, speed);
 }
 
-void GCodeExport::writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset)
+void GCodeExport::writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int distance_remaining, int last_move)
 {
     if (flavor == EGCodeFlavor::BFB)
     {
         writeMoveBFB(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature);
         return;
     }
-    writeExtrusion(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature, update_extrusion_offset);
+    writeExtrusion(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, distance_remaining, last_move);
 }
 
 void GCodeExport::writeMoveBFB(const int x, const int y, const int z, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature)
@@ -683,6 +692,7 @@ void GCodeExport::writeMoveBFB(const int x, const int y, const int z, const Velo
         Point3 diff = Point3(x,y,z) - getPosition();
         
         current_e_value += extrusion_per_mm * diff.vSizeMM();
+        current_e_value_abs += extrusion_per_mm * diff.vSizeMM();
     }
     else
     {
@@ -714,6 +724,7 @@ void GCodeExport::writeTravel(const coord_t& x, const coord_t& y, const coord_t&
     assert((Point3(x,y,z) - currentPosition).vSize() < MM2INT(1000)); // no crazy positions (this code should not be compiled for release)
 #endif //ASSERT_INSANE_OUTPUT
 
+
     const PrintFeatureType travel_move_type = extruder_attr[current_extruder].retraction_e_amount_current ? PrintFeatureType::MoveRetraction : PrintFeatureType::MoveCombing;
     const int display_width = extruder_attr[current_extruder].retraction_e_amount_current ? MM2INT(0.2) : MM2INT(0.1);
     const double layer_height = Application::getInstance().current_slice->scene.current_mesh_group->settings.get<double>("layer_height");
@@ -721,14 +732,26 @@ void GCodeExport::writeTravel(const coord_t& x, const coord_t& y, const coord_t&
 
     *output_stream << "G0";
     writeFXYZE(speed, x, y, z, current_e_value, travel_move_type);
+
 }
 
-void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset)
+void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset, int distance_remaining, int last_move)
 {
+
+
     if (currentPosition.x == x && currentPosition.y == y && currentPosition.z == z)
     {
         return;
     }
+
+    // Get Dispenser ratio...for tuning of Extruder speed.
+    const Settings& extruder_settings = Application::getInstance().current_slice->scene.extruders[current_extruder].settings;
+    const Ratio  dispenser_ratio = extruder_settings.get<Ratio>("dispenser_ratio");
+    // const double latency = 0.20; // # of seconds 
+    // A value of 20 == 0.20 ....which is 0.20 seconds.
+    const Ratio latency = extruder_settings.get<Ratio>("extruder_latency");
+    
+   
 
 #ifdef ASSERT_INSANE_OUTPUT
     assert(speed < 400 && speed > 1); // normal F values occurring in UM2 gcode (this code should not be compiled for release)
@@ -788,14 +811,507 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
     }
 
     extruder_attr[current_extruder].last_e_value_after_wipe += extrusion_per_mm * diff_length;
-    const double new_e_value = current_e_value + extrusion_per_mm * diff_length;
+    const double new_e_value = current_e_value + extrusion_per_mm * diff_length * dispenser_ratio;
 
-    *output_stream << "G1";
-    writeFXYZE(speed, x, y, z, new_e_value, feature);
+
+
+  
+
+   // double total_distance_remaining;   // Distance remaining after this move PLUS this move
+   // total_distance_remaining = distance_remaining + diff.vSizeMM();
+   
+
+
+   // Some of the printing is done as a polygon (path) and consists of multiple moves, extrusions all
+   // as one. It makes sense to try and "string" these together in a "single"  operation,
+   // rather than as individual MOVES - which means lots of WAITS - longer print times.
+   //
+   // latency > 0            - if we have no latency, (latency = 0), then we wouldn't want to run this code
+   // new_e_value - current_e_vale > 0  - IF nothing to extrude... pointless.
+   if (latency > 0 && new_e_value - current_e_value > 0) 
+   {
+      // distance_remaining > 0 - means that AFTER this move, there is still some distance to move as part of this polygon
+      // extruding_activity ==2 - means we are finishing off a move. We have to put this in, because LAST move...has distance_remaining == 0
+      if (distance_remaining > 0 || extrusion_activity == 2) 
+         {
+
+         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         // FIRST WE DO SOME CALCULATIONS TO DERIVE QUANTITIES REQUIRED LATER
+         // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+         // Calculate the time_remaining for given distance_remaining
+         double time_remaining = INT2MM(distance_remaining) / speed;
+         double d0 = diff_length;         // Distance in this MOVE
+         double t0 = d0 / speed ;            // Time to do this move
+
+         // WE need to add time remaining to the CURRENT move
+         time_remaining += t0;
+
+         // Calculate speed of Extrusion - Required when there is ZERO movement of x,y
+         double despeed = (new_e_value - current_e_value) / t0;   // mm/sec
+         Velocity espeed = Velocity(despeed);
+
+
+         // If extruding ... we want to have chance to check things.
+         if (extruding == 1) {
+            // See if after this move we expect time time remaining is less then latency. 
+            if (time_remaining  - t0 < latency) {
+               // We are nearing the end, so we need to finish up on this polygon.
+               extruding = 0;
+               // we must commence extrusion_activity 2- finishing up
+               extrusion_activity = 2;
+           }
+         } else {
+            if (distance_remaining > dist_remaining) {
+               extruding = 1;
+               extrusion_activity = 1;
+            }
+         }
+
+
+         // Record how far we have left (as this is used next time we do a path in the polygon above
+         dist_remaining = distance_remaining;
+
+
+
+         // Handle latency in beginning of move
+         if (extrusion_activity == 1) {
+
+            if (last_move == 1) {
+               log("Invalid state - we can't be on the last move if we are starting out");
+            }
+   
+
+
+            // Work out how much material to prime it...
+            // Can never exceed latency, but can be less then latency... i.e. really small move is being done.
+            double prime_amount = std::min(double(latency), time_remaining) * despeed;
+
+  
+            // First Move (E only, no x, y) [Primes the AIR gap between AUGER bottom and plate :) ]
+            // We extrude as much as required to fully prime the space between Auger bottom and plate.
+            double e1 = prime_amount + current_e_value;
+
+            *output_stream << "G1";
+            writeFE(espeed, e1, feature);
+            log("writeExtrusion: FIRST - x,y,z,e=%d,%d,%d,%f\n", currentPosition.x, currentPosition.y, currentPosition.z, e1);
+
+            writeComment("STARTING: E Only");
+
+            // If time remaining is less than latency, then we need to wait for the powder to 
+            // fall the remainder of the way
+            if (time_remaining < latency) {
+               double t_remaining = latency - time_remaining;
+
+               // We need to pause for This remaining Time
+               // Multiple by 1000 to convert seconds to milliseconds
+               int t_remaining_ms = int(t_remaining * 1000);
+               *output_stream << "G4 P" << t_remaining_ms << new_line;
+            } 
+
+
+            // Second Move (E and x and y)
+            int x2 = x;
+            int y2 = y;
+            int z2 = z;
+
+            // We are deliberately adding prime_amount to this because at the END of the move, we want the air still
+            // to be primed with powder. 
+            double e2 = new_e_value + prime_amount;
+
+            // Am aware that conceivable we actually are about to finish polygon up... and don't want to keep it primed.
+        
+            *output_stream << "G1";
+            writeFXYZE(speed, x2, y2, z2, e2, feature);
+
+            log("writeExtrusion: SECOND - x,y,z,e=%d,%d,%d,%f\n", x2,y2,z2,e2);
+            writeComment("STARTING: Post E Only");
+
+
+            // We are finished with extusion activity
+            extrusion_activity = 0;
+         } else if (extrusion_activity == 2) {
+
+
+
+            // Handle latency in end of move - We are in this routine because after we have completed this move 
+            // we will have LESS than latency time available.
+            // 
+            // What we need to be very mindful is that this move might not be the last...there could be 3 more moves for all we know.
+            // This makes the code particularly tricky to follow.
+            //
+            Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
+
+
+            // We want to stop extruding right up until we have "latency" time left.
+            // t0 = time to do WHOLE move - deduced earlier in code.
+            double t3 = time_remaining - latency;
+
+
+            // If we have to do more extruding (t3 > 0), then we need to do the remainder of the move in TWO parts
+            if (t3 >0) {
+               double x3 = cp.x + (x - cp.x) * t3 / t0;
+               double y3 = cp.y + (y - cp.y) * t3 / t0;
+               double z3 = cp.z + (z - cp.z) * t3 / t0;
+               double e3 = t3 * despeed + current_e_value;
+   
+               *output_stream << "G1";
+               writeFXYZE(speed, x3, y3, z3, e3, feature);
+               writeComment("FINISHING... Last E");
+
+
+            } else {
+               // Less than latency time left.
+            }
+
+            // Now we must move the remaining amount - with no extrusion
+            double x4 = x;
+            double y4 = y;
+            double z4 = z;
+            double e4 = current_e_value;   // No more extrusion required (purely a x,y,z move)
+
+            *output_stream << "G1";
+            writeFXYZE(speed, x4, y4, z4, e4, feature);
+   
+            // Reset back to no activity if this is the LAST move in a polygon.
+            if (last_move == 1) {
+               log("LAST MOVE\n");
+               extrusion_activity = 0;
+               writeComment("FINISHED");
+            } else {
+
+               writeComment("FINISHING");
+
+            }
+
+
+         } else if (extrusion_activity == 0) {
+
+            *output_stream << "G1";
+            writeFXYZE(speed, x, y, z, new_e_value, feature);
+            // writeComment("INBETWEEEN");
+         } else {
+
+            log("UNEXPECTED extrusion_activity = %f\n", extrusion_activity);
+         }
+      } else {
+         Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
+
+         // Get some details of the move
+         double d0 = diff_length;         // Distance we move in x, y, z
+         double t0 = d0 / speed;      // Time to do original move without compensation (seconds)
+         double tr = latency / t0;    // tr = Time Ratio
+         double despeed = (new_e_value - current_e_value) / t0;   // mm/sec
+         Velocity espeed = Velocity(despeed);
+
+         // IF travel time is greater than latency we need to generate three GCODES
+         // - Prime Air gap
+         // - Move and continue to extrude
+         // - Final move (no extrusion)
+         if (t0 > latency)
+         {
+
+            // First Move (E only, no x, y)
+            // We extrude as much as required to fully prime the space between
+            // Auger bottom and plate.
+            double e1 = tr * (new_e_value - current_e_value) + current_e_value;
+
+            *output_stream << "G1";
+            writeFE(espeed, e1, feature);
+
+
+            // Second Move (E and x and y)
+            int x2 = cp.x + (x - cp.x) * (t0 - latency) / t0;
+            int y2 = cp.y + (y - cp.y) * (t0 - latency) / t0;
+            int z2 = cp.z + (z - cp.z) * (t0 - latency) / t0;
+            double e2 = new_e_value;
+
+            *output_stream << "G1";
+            writeFXYZE(speed, x2, y2, z2, e2, feature);
+
+         }
+         else
+         {
+            // First Move (E only, no x, y)
+            double e1 = new_e_value;
+            double delta_e1 = new_e_value - current_e_value;
+
+            *output_stream << "G1";
+            writeFE(espeed, e1, feature);
+            // log("writeExtrusion: FIRST - x,y,z,e=%d,%d,%d,%f\n", cp.x, cp.y, cp.z, e1);
+
+            // At this point, we have extruded a minute amount of powder - ALL that is required over the entire
+            // move, but the powder has NOT hit the plate yet. So we can't move x, y JUST yet.
+            // Total time spent extruding this minute amount of powder is
+            double t_spent =  delta_e1 / despeed;
+            double t_remaining = latency - t_spent;
+  
+            // We need to pause for This remaining Time
+            // Multiple by 1000 to convert seconds to milliseconds
+            int t_remaining_ms = int(t_remaining* 1000);
+            *output_stream << "G4 P" << t_remaining_ms << new_line;
+         }
+
+
+         // Third Move (x, y only)
+         int x3 = x;
+         int y3 = y;
+         int z3 = z;
+         double e3 = new_e_value;
+
+         *output_stream << "G1";
+         writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+         // log("writeExtrusion: FINAL - x,y,z,e=%d,%d,%d,%f\n", x3,y3,z3,e3);
+
+
+
+         // *output_stream << "G1";
+         // writeFXYZE(speed, x, y, z, new_e_value, feature);
+         // writeComment("INDIVIDUAL");
+      }
+
+    } else {
+       // Unlikely to get here.
+       *output_stream << "G1";
+       writeFXYZE(speed, x, y, z, new_e_value, feature);
+
+       writeComment("NOT PART OF POLYGON");
+
+    }
+
+log("\n\n\n");
+
+
+
+/*
+    // If there is latency regarding the extrusion of material, we need to compensate for this in
+    // code, but having THREE moves
+    // First move, where ONLY the extruder is extruding (no x, y movement)
+    // Second move, to some point JUST shy of the destination point with x,y, E movemenet
+    // Thurd move, the final point, with NO E movement
+
+
+    if (latency != 0 && (new_e_value + current_e_offset != current_e_value)) {
+        Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
+  
+
+        // Get some details of the move
+        double d0 = diff.vSizeMM();         // Distance we move in x, y, z
+        double t0 = d0 / (speed * 60);      // Time to do original move without compensation (minutes)
+        double tr = (latency / 60) / t0;    // tr = Time Ratio
+
+        // Calculate speed of Extrusion - Required when there is ZERO movement of x,y
+        double despeed = (new_e_value - current_e_value) / t0;   // mm/min
+        Velocity espeed = Velocity(despeed / 60);
+
+        // log("d0 = %f\n", d0);
+        // log("despeed = %f\n", despeed);
+
+        // log("t0, TR = %f, %f\n", t0, tr);
+        // log("writeExtrusion: INITIAL POS - x,y,z,e=%d,%d,%d,%f\n", cp.x, cp.y, cp.z, current_e_value);
+
+
+        // If the travel time is greater than the latency, we have THREE moves
+        // PRIME
+        // MOVE&Extrude
+        // FINALISE
+        if (tr < 1) {
+           // log("writeExtrusion: t0 is greater latency - THREE MOVES\n");
+
+           // First Move (E only, no x, y)
+           // We extrude as much as required to fully prime the space between
+           // Auger bottom and plate.
+           double e1 = tr * (new_e_value - current_e_value) + current_e_value;
+
+           *output_stream << "G1";
+           writeFE(espeed, e1, feature);
+
+           // Second Move (E and x and y)
+           int x2 = cp.x + (x - cp.x) * (1 - tr);
+           int y2 = cp.y + (y - cp.y) * (1 - tr);
+           int z2 = cp.z + (z - cp.z) * (1 - tr);
+           double e2 = new_e_value;
+ 
+           *output_stream << "G1";
+           writeFXYZE(speed, x2, y2, z2, e2, feature);
+
+
+       } else {
+          // log("writeExtrusion: t0 is less than latency - TWO MOVES\n");
+          // If travel time is LESS than the latency time, we have two moves
+          // PRIME (but only partial) 
+          // FINALISE
+          //
+          // This is beause so little powder is required, it doesn't need to extrude much....it doens't need to extrude 
+          // the ENTIRE latency time.
+
+          // First Move (E only, no x, y)
+          double e1 = new_e_value;
+          double delta_e1 = new_e_value - current_e_value;
+
+          *output_stream << "G1";
+          writeFE(espeed, e1, feature);
+          // log("writeExtrusion: FIRST - x,y,z,e=%d,%d,%d,%f\n", cp.x, cp.y, cp.z, e1);
+ 
+          // At this point, we have extruded a minute amount of powder - ALL that is required over the entire
+          // move, but the powder has NOT hit the plate yet. So we can't move x, y JUST yet.
+          // Total time spent extruding this minute amount of powder is 
+          double t_spent =  delta_e1 / despeed;
+          double t_remaining = latency - t_spent;
+ 
+          // log("writeExtrusion: DeltaE1 (mm): %f\n", delta_e1);
+          // log("writeExtrusion: despeed (mm/min): %f\n", despeed);
+          // log("writeExtrusion: Time spent (sec): %f\n", t_spent);
+          // log("writeExtrusion: Time remaining (sec): %f\n", t_remaining);
+  
+          // We need to pause for This remaining Time
+          // Multiple by 1000 to convert seconds to milliseconds
+          int t_remaining_ms = int(t_remaining* 1000);
+          *output_stream << "G4 P" << t_remaining_ms << new_line;
+
+
+       }
+
+
+       // Third Move (x, y only)
+       int x3 = x;
+       int y3 = y;
+       int z3 = z;
+       double e3 = new_e_value;
+
+       *output_stream << "G1";
+       writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+       log("writeExtrusion: FINAL - x,y,z,e=%d,%d,%d,%f\n", x3,y3,z3,e3);
+
+
+    } else {
+
+       *output_stream << "G1";
+       writeFXYZE(speed, x, y, z, new_e_value, feature);
+   }
+*/
+
+
+
 }
 
+// JOE
 void GCodeExport::writeFXYZE(const Velocity& speed, const int x, const int y, const int z, const double e, const PrintFeatureType& feature)
 {
+
+    const double max_extrusion = 200;
+    const Point3 diff = Point3(x,y,z) - currentPosition;
+    double local_e_value = current_e_value;
+    const double total_extrusion = e - local_e_value;
+
+    /* The firmware that is installed by default on the Creality Ender5 restricts MAX extrusion in ONE command to 200 */
+    /* If the code above needs to perform a legitmate extrusion greater than 200, we split it up into smaller extusions. */
+    if (total_extrusion > max_extrusion) {
+        int px;              // PART x distance we move the extruder, all while we keep extruded amount <= 200
+        int py;              // PART y distance we move the extruder, all while we keep extruded amount <= 200
+        double pe;           // PART e - how much we extrude this time
+        double m;            // Slope the path of extruder across plate
+        int dist_remaining;  // How far of the 'total_travel' we have left
+        int dist;            // Used to hold value to move extruder
+        double extrusion_remaining;  // How much extrusion remaining to do.
+        const int total_travel = diff.vSize();
+        double direction = 1.0; // default to this.
+
+        // Calculate slope of path (the direction of travel)
+        if (y == currentPosition.y) {
+           m = 0;
+           if (x < currentPosition.x) {
+              direction = -1.0;
+           }
+        } else if (x == currentPosition.x) {
+           m = 999999999; // Infinite
+           if (y < currentPosition.y) {
+              direction = -1.0;
+           }
+        } else {
+           m = ((double)y - (double)currentPosition.y) / ((double)x - (double)currentPosition.x);
+        }
+
+
+        // Work out the total extrusions amounts left... as a starting point
+        dist_remaining      = total_travel;
+        extrusion_remaining = total_extrusion;
+
+        // while we have extruding left... EXTRUDE!!
+        bool finished = false;
+        px = currentPosition.x;
+        py = currentPosition.y;
+        while (finished == false) {
+      
+           // Calculate the Max distance we can travel (over which the max extrusion will take place)
+           if (extrusion_remaining > max_extrusion) {
+              dist =  dist_remaining *  (max_extrusion / extrusion_remaining); 
+           } else {
+              dist = dist_remaining;
+              finished = true;
+           }
+        
+
+           // Calculate intermediate X and Y position. This is complicated by real-life horizontal and vertial paths
+           if (m == 0) {
+              // Flat line, only px changes
+              px = px + direction * dist;
+           } else if (m == 999999999) {
+              // Vertical line, only py changes
+              py = py + direction * dist;
+           } else {
+              px = px + dist / sqrt( 1 + m * m);
+              py = py + m * (dist / sqrt(1 + m * m));
+           }
+
+
+           pe = total_extrusion * dist / total_travel;
+           local_e_value = pe + local_e_value;
+       
+
+           // If still going extruding (and not the first one)...then prefix with G1
+           if (dist_remaining < total_travel) {
+              *output_stream << "G1";
+            }
+           GCodeExport::writeFXYZEpart(speed, px, py, z, local_e_value, feature);
+
+           // Deduct the distance travelled and extruded material from counters
+           dist_remaining = dist_remaining - dist;
+           extrusion_remaining = extrusion_remaining - pe;
+        }
+
+        // Print out something in GCode, so HUMAN knows what was done here...
+        *output_stream << "; Delta E > " << max_extrusion << " ...splitting it up. This is to accomodate Ender5 Firmware limit." << new_line;
+        *output_stream << new_line << "; Total Travel: " << total_travel << new_line;
+        *output_stream << "; Extrusion Remaining: " << total_extrusion << new_line;
+        *output_stream << "; Slope: " << m << new_line << new_line;
+
+
+        *output_stream << ";x = " << x <<new_line << new_line;
+
+
+
+    } else {
+      // Under the limit...so generate code as usual.
+      GCodeExport::writeFXYZEpart(speed, x, y, z, e, feature);
+    }
+}
+
+
+
+/* 
+ * This does the actual command writing
+ *
+ * Note: I expect that slowing down, speeding up will potentially cause issues with powder continuity...
+ *       but because speeds are low (10mm/sec ... which might go to 20mm/sec), we are talking about VERY small 
+ *       timeframes...which I'm hoping will result in seamless output..
+ *
+*/
+void GCodeExport::writeFXYZEpart(const Velocity& speed, const int x, const int y, const int z, const double e, const PrintFeatureType& feature)
+{
+
     if (currentSpeed != speed)
     {
         *output_stream << " F" << PrecisionedDouble{1, speed * 60};
@@ -818,15 +1334,50 @@ void GCodeExport::writeFXYZE(const Velocity& speed, const int x, const int y, co
     *output_stream << new_line;
     
     currentPosition = Point3(x, y, z);
+
+
+    // Update values
+    current_e_value_abs += (e - current_e_value); // TODO
     current_e_value = e;
+
+    // log("writeFXYZE: current_e_value_abs: %f\n", current_e_value_abs);
+
     estimateCalculator.plan(TimeEstimateCalculator::Position(INT2MM(x), INT2MM(y), INT2MM(z), eToMm(e)), speed, feature);
+
 }
+
+
+
+void GCodeExport::writeFE(const Velocity& speed, const double e, const PrintFeatureType& feature)
+{
+    if (currentSpeed != speed)
+    {
+        *output_stream << " F" << PrecisionedDouble{1, speed * 60};
+        currentSpeed = speed;
+    }
+
+    if (e + current_e_offset != current_e_value)
+    {
+        const double output_e = (relative_extrusion)? e + current_e_offset - current_e_value : e + current_e_offset;
+        *output_stream << " " << extruder_attr[current_extruder].extruderCharacter << PrecisionedDouble{5, output_e};
+    }
+    *output_stream << new_line;
+
+    // Update values
+    current_e_value_abs += (e - current_e_value); // TODO
+    current_e_value = e;
+
+
+    estimateCalculator.plan(TimeEstimateCalculator::Position(INT2MM(currentPosition.x), INT2MM(currentPosition.y), INT2MM(currentPosition.z), eToMm(e)), speed, feature);
+}
+
 
 void GCodeExport::writeUnretractionAndPrime()
 {
     const double prime_volume = extruder_attr[current_extruder].prime_volume;
     const double prime_volume_e = mm3ToE(prime_volume);
     current_e_value += prime_volume_e;
+    current_e_value_abs += prime_volume_e;
     if (extruder_attr[current_extruder].retraction_e_amount_current)
     {
         const Settings& extruder_settings = Application::getInstance().current_slice->scene.extruders[current_extruder].settings;
@@ -845,6 +1396,7 @@ void GCodeExport::writeUnretractionAndPrime()
         else
         {
             current_e_value += extruder_attr[current_extruder].retraction_e_amount_current;
+            current_e_value_abs += extruder_attr[current_extruder].retraction_e_amount_current;
             const double output_e = (relative_extrusion)? extruder_attr[current_extruder].retraction_e_amount_current + prime_volume_e : current_e_value;
             *output_stream << "G1 F" << PrecisionedDouble{1, extruder_attr[current_extruder].last_retraction_prime_speed * 60} << " " << extruder_attr[current_extruder].extruderCharacter << PrecisionedDouble{5, output_e} << new_line;
             currentSpeed = extruder_attr[current_extruder].last_retraction_prime_speed;
@@ -941,6 +1493,7 @@ void GCodeExport::writeRetraction(const RetractionConfig& config, bool force, bo
     {
         double speed = ((retraction_diff_e_amount < 0.0)? config.speed : extr_attr.last_retraction_prime_speed);
         current_e_value += retraction_diff_e_amount;
+        current_e_value_abs += retraction_diff_e_amount;
         const double output_e = (relative_extrusion)? retraction_diff_e_amount : current_e_value;
         *output_stream << "G1 F" << PrecisionedDouble{1, speed * 60} << " " << extr_attr.extruderCharacter << PrecisionedDouble{5, output_e} << new_line;
         currentSpeed = speed;
@@ -950,6 +1503,7 @@ void GCodeExport::writeRetraction(const RetractionConfig& config, bool force, bo
 
     extr_attr.retraction_e_amount_current = new_retraction_e_amount; // suppose that for UM2 the retraction amount in the firmware is equal to the provided amount
     extr_attr.prime_volume += config.prime_volume;
+
 }
 
 void GCodeExport::writeZhopStart(const coord_t hop_height, Velocity speed/*= 0*/)
@@ -1007,6 +1561,8 @@ void GCodeExport::startExtruder(const size_t new_extruder)
     resetExtrusionValue(); // zero the E value on the new extruder, just to be sure
 
     const std::string start_code = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<std::string>("machine_extruder_start_code");
+    const double prime_amount = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<double>("machine_extruder_prime_amount");
+   
 
     if(!start_code.empty())
     {
@@ -1016,6 +1572,8 @@ void GCodeExport::startExtruder(const size_t new_extruder)
         }
 
         writeCode(start_code.c_str());
+
+        primeExtruder(prime_amount);
 
         if (relative_extrusion)
         {
@@ -1031,6 +1589,140 @@ void GCodeExport::startExtruder(const size_t new_extruder)
 
     setExtruderFanNumber(new_extruder);
 }
+
+
+void GCodeExport::primeExtruder(double prime_amount)
+{
+
+    // Move to the very right, to where we start the prime
+    *output_stream << "G1 X30 F1500" << new_line;
+
+    // Prime a little
+    current_e_value += prime_amount;
+    current_e_value_abs += prime_amount;
+    *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
+
+    // Move left a little
+    *output_stream << "G1 X32 F250" << new_line;
+
+    // Prime a little more.
+    current_e_value += prime_amount;
+    current_e_value_abs += prime_amount;
+    *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
+
+    // Move left a little
+    *output_stream << "G1 X34 F250" << new_line;
+
+    // Prime a little more.
+    current_e_value += prime_amount;
+    current_e_value_abs += prime_amount;
+    *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
+
+    // Move left a little
+    *output_stream << "G1 X36 F250" << new_line;
+
+    // Prime a little more.
+    current_e_value += prime_amount;
+    current_e_value_abs += prime_amount;
+    *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
+
+
+}
+ 
+
+
+void GCodeExport::finishExtruder()
+{
+
+    const Settings& old_extruder_settings = Application::getInstance().current_slice->scene.extruders[current_extruder].settings;
+
+    const std::string pre_end_code = old_extruder_settings.get<std::string>("machine_extruder_pre_end_code");
+
+    const std::string end_code = old_extruder_settings.get<std::string>("machine_extruder_end_code");
+
+    if(!end_code.empty() && !pre_end_code.empty())
+    {
+        if (relative_extrusion)
+        {
+            writeExtrusionMode(false); // ensure absolute extrusion mode is set before the end gcode
+        }
+
+        // Move to dump location
+        writeCode(pre_end_code.c_str());
+
+        // New code to ensure we can disEngage motor from the Extruder Mechanism - METAL
+        disEngageMotor();
+
+        writeCode(end_code.c_str());
+
+        if (relative_extrusion)
+        {
+            writeExtrusionMode(true); // restore relative extrusion mode
+        }
+    }
+
+}
+
+
+void GCodeExport::disEngageMotor()
+{
+
+   log("Doing Motor Dis-engage...\n");
+
+   double angle_offset = 37;    // # of degrees that the Auger is ahead of stepper motor points
+   // double e_per_revolution = M_PI * 11.0000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
+   // double e_per_revolution = M_PI * 10.9000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
+   // double e_per_revolution = 34.17335;   // Determined by trial and error.
+   // double e_per_revolution = 34.5;   // Determined by trial and error.
+   double e_per_revolution = 34.41126;
+   double e_half_turn = e_per_revolution / 2;     // Helpers
+   double e_quarter_turn = e_per_revolution / 4;  // Helpers
+   double e_offset = e_per_revolution * (angle_offset / 360);
+
+   // Work out how far to get precisely back to starting position.
+   double e_move = e_per_revolution * (1 - ((current_e_value_abs / e_per_revolution) - int(current_e_value_abs / e_per_revolution)));
+
+   // With the above, it will always put this back to the original position ....which might be more than we have to...
+   if (e_move > e_half_turn) {
+      e_move = e_move - e_half_turn;
+   }
+
+   // Work out how far to move back to position where the AUGER contact points will be aligned along the X-Axis.
+   e_move = e_move + e_quarter_turn - e_offset;
+
+
+
+   double current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
+   log("current_e_value_abs: %f\n", current_e_value_abs);
+   log("Current Angle: %f\n", current_angle);
+
+   // log("FIRST MOVE: %f\n", e_move);
+   current_e_value += e_move;  // DO we REALLY Need to record this?
+   current_e_value_abs += e_move;
+
+   *output_stream << "G1 E" << current_e_value << " F500" << new_line;
+   *output_stream << "; current_e_value_abs = " << current_e_value_abs << new_line;
+
+
+   current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
+   log("AFTER FIRST_MOVE: %f\n", current_angle);
+   
+   // SECOND MOVE
+   e_move = -(e_quarter_turn - e_offset);
+
+   
+
+   // writeCode(e_move_str);
+   // log("SECOND MOVE: %f\n", e_move);
+   current_e_value += e_move;   // DO we REALLY Need to record this?
+   current_e_value_abs += e_move;
+
+   *output_stream << "G1 E" << current_e_value << " F500" << new_line;
+
+   current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
+   log("AFTER SECOND_MOVE: %f\n", current_angle);
+}
+
 
 void GCodeExport::switchExtruder(size_t new_extruder, const RetractionConfig& retraction_config_old_extruder, coord_t perform_z_hop /*= 0*/)
 {
@@ -1054,14 +1746,22 @@ void GCodeExport::switchExtruder(size_t new_extruder, const RetractionConfig& re
 
     resetExtrusionValue(); // zero the E value on the old extruder, so that the current_e_value is registered on the old extruder
 
+    const std::string pre_end_code = old_extruder_settings.get<std::string>("machine_extruder_pre_end_code");
+
     const std::string end_code = old_extruder_settings.get<std::string>("machine_extruder_end_code");
 
-    if(!end_code.empty())
+    if(!end_code.empty() && !pre_end_code.empty())
     {
         if (relative_extrusion)
         {
             writeExtrusionMode(false); // ensure absolute extrusion mode is set before the end gcode
         }
+
+        // Move to dump location
+        writeCode(pre_end_code.c_str());
+
+        // New code to ensure we can disEngage motor from the Extruder Mechanism - METAL
+        disEngageMotor();
 
         writeCode(end_code.c_str());
 
@@ -1073,6 +1773,9 @@ void GCodeExport::switchExtruder(size_t new_extruder, const RetractionConfig& re
 
     startExtruder(new_extruder);
 }
+
+
+
 
 void GCodeExport::writeCode(const char* str)
 {

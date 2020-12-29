@@ -3015,6 +3015,9 @@ void FffGcodeWriter::finalize()
         gcode.writeJerk(mesh_group_settings.get<Velocity>("machine_max_jerk_xy"));
     }
 
+    /* Perform any Extruder END tasks at end of print */
+    gcode.finishExtruder();
+
     const std::string end_gcode = mesh_group_settings.get<std::string>("machine_end_gcode");
 
     if (end_gcode.length() > 0 && mesh_group_settings.get<bool>("relative_extrusion"))
