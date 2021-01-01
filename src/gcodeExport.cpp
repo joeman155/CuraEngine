@@ -1595,7 +1595,7 @@ void GCodeExport::primeExtruder(double prime_amount)
 {
 
     // Move to the very right, to where we start the prime
-    *output_stream << "G1 X30 F1500" << new_line;
+    *output_stream << "G1 X10 F1500" << new_line;
 
     // Prime a little
     current_e_value += prime_amount;
@@ -1603,7 +1603,7 @@ void GCodeExport::primeExtruder(double prime_amount)
     *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X32 F250" << new_line;
+    *output_stream << "G1 X12 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
@@ -1611,7 +1611,7 @@ void GCodeExport::primeExtruder(double prime_amount)
     *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X34 F250" << new_line;
+    *output_stream << "G1 X14 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
@@ -1619,7 +1619,7 @@ void GCodeExport::primeExtruder(double prime_amount)
     *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X36 F250" << new_line;
+    *output_stream << "G1 X16 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
@@ -1669,7 +1669,7 @@ void GCodeExport::disEngageMotor()
 
    log("Doing Motor Dis-engage...\n");
 
-   double angle_offset = 37;    // # of degrees that the Auger is ahead of stepper motor points
+   double angle_offset = 45;    // # of degrees that the Auger is ahead of stepper motor points
    // double e_per_revolution = M_PI * 11.0000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
    // double e_per_revolution = M_PI * 10.9000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
    // double e_per_revolution = 34.17335;   // Determined by trial and error.
