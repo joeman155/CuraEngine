@@ -1678,13 +1678,11 @@ int xx, yy;
 if (path.points.size() > 0 ) 
 {
    distance_remaining = 0;
-   for (unsigned int p_idx = point_idx; p_idx < path.points.size(); p_idx++) 
+   for (unsigned int p_idx = point_idx+1; p_idx < path.points.size(); p_idx++) 
    {
-      if (p_idx > point_idx) {
-        xx = path.points[p_idx].X - path.points[p_idx-1].X;
-        yy = path.points[p_idx].Y - path.points[p_idx-1].Y;
-        distance_remaining = distance_remaining + pow(xx * xx + yy * yy, 0.5);
-      } 
+      xx = path.points[p_idx].X - path.points[p_idx-1].X;
+      yy = path.points[p_idx].Y - path.points[p_idx-1].Y;
+      distance_remaining = distance_remaining + pow(xx * xx + yy * yy, 0.5);
    }
 }
 log("At Point %d (out of %d) Distance remaining: %f\n", point_idx, path.points.size(), distance_remaining);
