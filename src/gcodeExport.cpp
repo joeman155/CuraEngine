@@ -43,13 +43,9 @@ GCodeExport::GCodeExport()
 {
     *output_stream << std::fixed;
 
-    // dist_remaining = 0; // Track distance remaining (LATENCY CODE)
-    extruding = 0;      // If 0, it means we are not extruding, if 1, it means we are extruding
-                        // This is used to determine when we should consider our extuder_latency operations
-                        // Latency operations are when we are STARTING, or when we are STOPPING. (LATENCY CODE)
+    premove_extrude= 0; // Amount of material extruded in PRE-MOVE. This is also used to identify is pre-extrude
+                        // has already occured and is used to work out how much LESS to extrude at the end.
     finishing_up = 0;   // If 0, we are not finishing up... if 1...we are finishing up.
-    // extrusion_activity = 0; // 0 = No activity 1 = Starting extruding, 2 = Finishing extruding.  (LATENCY CODE)
-                        //
     current_e_value = 0;
     current_e_value_abs = 0;
     current_extruder = 0;
@@ -831,6 +827,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
    {
 
       // Get some details of the move
+      double e_delta = new_e_value - current_e_value;
       double d0 = diff_length;              // Distance we move in x, y, z
       double t0 = d0 / speed;               // Time to do original move without compensation (seconds)
       double tr = extruder_latency / t0;    // tr = Time Ratio
@@ -842,7 +839,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
       // See if we need to start extrusion... WE ALWAYS need to extrude ONLY before starting a move
       // UNLESS extrusion has already started.
-      if (extruding == 0) 
+      if (premove_extrude == 0) 
       {
  
          // Include some useful info on type of path
@@ -861,16 +858,19 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          if (t0 > extruder_latency) 
          {
             // Calculate the NEW E-value... to just extrude
-            double ext_move = tr * (new_e_value - current_e_value) + current_e_value;
+            premove_extrude = tr * (new_e_value - current_e_value);
+            double ext_move = premove_extrude + current_e_value;
 
             *output_stream << "G1";
             writeFE(espeed, ext_move, feature);
+*output_stream << "; Full extrude" << new_line;
          }
          else
          {
 
             // First Move (E only, no x, y)
             double e1 = new_e_value;
+            premove_extrude = new_e_value - current_e_value;
  
             // Calculate amount of time spent extruding this very small amount of powder
             double t_spent =  (new_e_value - current_e_value) / despeed;
@@ -881,14 +881,15 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
             *output_stream << "G1";
             writeFE(espeed, e1, feature);
  
+*output_stream << "; Partial extrude" << new_line;
+
             // Generate G-Code command to wait for powder to hit plate.
             // Multiple by 1000 to convert seconds to milliseconds
             int t_remaining_ms = int(t_remaining* 1000);
             *output_stream << "G4 P" << t_remaining_ms << new_line;
          }
 
-         extruding = 1; // Extruding started, so don't start again.
-      }  // End of test "extruding == 1"
+      }  // End of test "premove_extrude == 0"
 
 
 
@@ -905,17 +906,18 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
          // Because the next_distance_remaining > extruder_latency...we need to ensure the Extruder is fully primed
          // with powder at the end of this move.
-         double prime_amount = double(extruder_latency) * despeed;
+         // double prime_amount = double(extruder_latency) * despeed;
 
          // Second Move (E and x and y)
 
          // We are deliberately adding prime_amount to this because at the END of the move, we want the air still
          // to be primed with powder.
-         double ext_move = new_e_value + prime_amount;
+         // double ext_move = new_e_value + prime_amount;
+         double ext_move = current_e_value + e_delta;
 
          *output_stream << "G1";
          writeFXYZE(speed, x, y, z, ext_move, feature);
-//*output_stream << "; test1" << new_line;
+//*output_stream << "; Continuing to extrude...." << new_line;
 
      } 
      else
@@ -936,22 +938,22 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
               double x3 = cp.x + (x - cp.x) * t3 / t0;
               double y3 = cp.y + (y - cp.y) * t3 / t0;
               double z3 = cp.z + (z - cp.z) * t3 / t0;
-              double e3 = new_e_value;
+              double e3 = new_e_value - premove_extrude;
   
               *output_stream << "G1";
               writeFXYZE(speed, x3, y3, z3, e3, feature);
-//*output_stream << "; test2" << new_line;
+//*output_stream << "; Last Extrude" << new_line;
            }
 
 
            // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
-           double e3 = new_e_value;
+           double e3 = current_e_value;
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-//*output_stream << "; test3" << new_line;
+//*output_stream << "; Finished up" << new_line;
          
            finishing_up = 0;
-           extruding = 0;
+           premove_extrude = 0;
         }
         else
         {
@@ -968,18 +970,17 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            if (next_distance_remaining > 0) {
               t0_next = next_distance_remaining / speed;
            }
+
+           // Deduce timing and new position
            double t3 = t0 + t0_next - extruder_latency;
-
-           // Deduce E value that fully primes it.
-           double prime_amount = double(extruder_latency) * despeed;
-
            double x3 = cp.x + (x - cp.x) * t3 / t0;
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
 
-           // We are deliberately adding prime_amount to this because at the END of the move, we want the air still
-           // to be primed with powder.
-           double e3 = new_e_value + prime_amount;
+           // We are deliberately removing the additional primed material from the end....because we don't want to
+           // extrude more than we were meant to!
+           // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
+           double e3 = new_e_value - premove_extrude;
 
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
@@ -991,7 +992,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 //*output_stream << "; test5" << new_line;
 
 
-           finishing_up = 1;
+           finishing_up = 1; // So that next time...we do not extrude...we just MOVE the PD.
         }
      }
 

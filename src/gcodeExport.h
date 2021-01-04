@@ -114,7 +114,7 @@ private:
     std::ostream* output_stream;
     std::string new_line;
 
-    int    extruding;       // Are we? (1) or are we not (0) extruding...
+    double premove_extrude;    // Amount of material we have extruded BEFORE moving extruder
     int    finishing_up;       // Are we? (1) or are we not (0) extruding...
     double current_e_value; //!< The last E value written to gcode (in mm or mm^3)
     double current_e_value_abs; // This is like current_e_value, EXCEPT that it isn't reset when current_e_value is reset.
