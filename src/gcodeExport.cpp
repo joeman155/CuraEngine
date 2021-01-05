@@ -620,6 +620,8 @@ void GCodeExport::writeTravel(const Point& p, const Velocity& speed)
 void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining, int last_move)
 {
     writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining, last_move);
+*output_stream << "lm: " << last_move  << new_line;
+*output_stream << "ndr: " << next_distance_remaining << new_line;
 }
 
 void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
@@ -832,6 +834,9 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double t0 = d0 / speed;               // Time to do original move without compensation (seconds)
       double tr = extruder_latency / t0;    // tr = Time Ratio
 
+      double extruder_distance = speed * extruder_latency;   // Distance the extruder moves in the time that it takes
+                                                             // for the powder to fall and start hitting the plate.
+
       // Calculate speed at which we need to EXTRUDE this material
       double despeed = (new_e_value - current_e_value) / t0;   // mm/sec
       Velocity espeed = Velocity(despeed);
@@ -895,10 +900,16 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
 
-
+*output_stream << "diff_length: "<< diff_length << new_line;
+if (next_distance_remaining < 0) {
+   *output_stream << "next_distance_remaining: 0 mm" << new_line;
+} else {
+   *output_stream << "next_distance_remaining: " << INT2MM(next_distance_remaining) << " mm" << new_line;
+}
+*output_stream << "extruder_distance, finishing_up: " << extruder_distance << ", " << finishing_up << new_line;
 
      // See how we want to proceed with the G-Codes
-     if (next_distance_remaining > extruder_latency)
+     if (INT2MM(next_distance_remaining) > extruder_distance)
      {
          // The NEXT move after this is greater than extruder_latency, which means we don't have to 
          // worry about finishing the whole "move" this time.
@@ -910,19 +921,18 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
          // Second Move (E and x and y)
 
-         // We are deliberately adding prime_amount to this because at the END of the move, we want the air still
-         // to be primed with powder.
-         // double ext_move = new_e_value + prime_amount;
+         // We are already primed ahead of the actual amount we want to extrude...but because we have a long
+         // way to go, we just keep extruding amount required at each path.
          double ext_move = current_e_value + e_delta;
 
          *output_stream << "G1";
          writeFXYZE(speed, x, y, z, ext_move, feature);
-//*output_stream << "; Continuing to extrude...." << new_line;
+*output_stream << "; Continuing to extrude...." << new_line;
 
      } 
      else
      {
-        // NEXT_DISTANCE_REMAINING < EXTRUDER_LATENCY AMOUNT
+        // NEXT_DISTANCE_REMAINING < EXTRUDER_DISTANCE AMOUNT
         // next_distance_remaining < 0 (-1) indicates SINGLE extrusion...not multi-move
         if (finishing_up == 1 || next_distance_remaining < 0  || next_distance_remaining == 0)
         {
@@ -942,7 +952,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
   
               *output_stream << "G1";
               writeFXYZE(speed, x3, y3, z3, e3, feature);
-//*output_stream << "; Last Extrude" << new_line;
+*output_stream << "; Last Extrude" << new_line;
            }
 
 
@@ -950,16 +960,16 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double e3 = current_e_value;
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-//*output_stream << "; Finished up" << new_line;
+*output_stream << "; Finished up" << new_line;
          
            finishing_up = 0;
            premove_extrude = 0;
         }
-        else
+        else 
         {
            // There are some subsequent moves and we need to take this into consideration
            // i.e. we need to spend 'extruder_latency' time moving WITHOUT extruding and this
-           // time is split across the CURRENT move and the NEXT move. We need to get the split right.
+           // time is split across the CURRENT move and the NEXT move(s). We need to get the split right.
 
 
            // Current Position
@@ -968,7 +978,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double t0_next = 0;
            // Time to be spent on subsequent moves...
            if (next_distance_remaining > 0) {
-              t0_next = next_distance_remaining / speed;
+              t0_next = INT2MM(next_distance_remaining) / speed;
            }
 
            // Deduce timing and new position
@@ -977,19 +987,23 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
 
+           // Calculate theoretical extrude amount in next move
+           double e3_next = (new_e_value - current_e_value) * (INT2MM(next_distance_remaining) / diff_length);
+*output_stream << "e3_next: " << e3_next << new_line;
+
            // We are deliberately removing the additional primed material from the end....because we don't want to
            // extrude more than we were meant to!
            // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
-           double e3 = new_e_value - premove_extrude;
+           double e3 = new_e_value - premove_extrude + e3_next;
 
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
-//*output_stream << "; test4" << new_line;
+*output_stream << "; test4" << new_line;
 
            // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-//*output_stream << "; test5" << new_line;
+*output_stream << "; test5" << new_line;
 
 
            finishing_up = 1; // So that next time...we do not extrude...we just MOVE the PD.
