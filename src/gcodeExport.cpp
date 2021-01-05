@@ -960,10 +960,17 @@ if (next_distance_remaining < 0) {
            double e3 = current_e_value;
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-*output_stream << "; Finished up" << new_line;
+
          
-           finishing_up = 0;
-           premove_extrude = 0;
+           // ONLY finish up if there is definitely no more moving after this move.
+           if (next_distance_remaining < 0  || next_distance_remaining == 0) 
+           {
+              finishing_up = 0;
+              premove_extrude = 0;
+              *output_stream << "; Finished up." << new_line;
+           } else {
+              *output_stream << "; Finishing up..." << new_line;
+           }
         }
         else 
         {
