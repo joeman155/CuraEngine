@@ -850,12 +850,11 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          // Include some useful info on type of path
          if (next_distance_remaining > 0)  {
             double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
-// JOE3             
-            *output_stream << "; Multipath extrusion of distance: " << total_distance_remaining << " mm" << new_line;
+//             *output_stream << "; Multipath extrusion of distance: " << total_distance_remaining << " mm" << new_line;
          } else if (next_distance_remaining <=0) {
-            *output_stream << "; SINGLE line extrusion: " << diff_length << " mm" << new_line;
+//            *output_stream << "; SINGLE line extrusion: " << diff_length << " mm" << new_line;
          } else {
-            *output_stream << "; OTHER line extrusion of distance: " << INT2MM(next_distance_remaining) << " mm" << new_line;
+//            *output_stream << "; OTHER line extrusion of distance: " << INT2MM(next_distance_remaining) << " mm" << new_line;
          }
 
 
@@ -868,7 +867,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
             *output_stream << "G1";
             writeFE(espeed, ext_move, feature);
-*output_stream << "; Full extrude" << new_line;
+//*output_stream << "; Full extrude" << new_line;
          }
          else
          {
@@ -886,7 +885,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
             *output_stream << "G1";
             writeFE(espeed, e1, feature);
  
-*output_stream << "; Partial extrude" << new_line;
+//*output_stream << "; Partial extrude" << new_line;
 
             // Generate G-Code command to wait for powder to hit plate.
             // Multiple by 1000 to convert seconds to milliseconds
@@ -900,6 +899,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
 
+/*
 *output_stream << "diff_length: "<< diff_length << new_line;
 if (next_distance_remaining < 0) {
    *output_stream << "next_distance_remaining: 0 mm" << new_line;
@@ -907,6 +907,7 @@ if (next_distance_remaining < 0) {
    *output_stream << "next_distance_remaining: " << INT2MM(next_distance_remaining) << " mm" << new_line;
 }
 *output_stream << "extruder_distance, finishing_up: " << extruder_distance << ", " << finishing_up << new_line;
+*/
 
      // See how we want to proceed with the G-Codes
      if (INT2MM(next_distance_remaining) > extruder_distance)
@@ -927,7 +928,7 @@ if (next_distance_remaining < 0) {
 
          *output_stream << "G1";
          writeFXYZE(speed, x, y, z, ext_move, feature);
-*output_stream << "; Continuing to extrude...." << new_line;
+// *output_stream << "; Continuing to extrude...." << new_line;
 
      } 
      else
@@ -952,7 +953,7 @@ if (next_distance_remaining < 0) {
   
               *output_stream << "G1";
               writeFXYZE(speed, x3, y3, z3, e3, feature);
-*output_stream << "; Last Extrude" << new_line;
+// *output_stream << "; Last Extrude" << new_line;
            }
 
 
@@ -996,7 +997,7 @@ if (next_distance_remaining < 0) {
 
            // Calculate theoretical extrude amount in next move
            double e3_next = (new_e_value - current_e_value) * (INT2MM(next_distance_remaining) / diff_length);
-*output_stream << "e3_next: " << e3_next << new_line;
+// *output_stream << "e3_next: " << e3_next << new_line;
 
            // We are deliberately removing the additional primed material from the end....because we don't want to
            // extrude more than we were meant to!
@@ -1005,12 +1006,12 @@ if (next_distance_remaining < 0) {
 
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
-*output_stream << "; test4" << new_line;
+// *output_stream << "; test4" << new_line;
 
            // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-*output_stream << "; test5" << new_line;
+// *output_stream << "; test5" << new_line;
 
 
            finishing_up = 1; // So that next time...we do not extrude...we just MOVE the PD.
