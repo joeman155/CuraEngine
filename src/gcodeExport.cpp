@@ -833,6 +833,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double d0 = diff_length;              // Distance we move in x, y, z
       double t0 = d0 / speed;               // Time to do original move without compensation (seconds)
       double tr = extruder_latency / t0;    // tr = Time Ratio
+      double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
+      double total_time_remaining = total_distance_remaining / speed;
 
       double extruder_distance = speed * extruder_latency;   // Distance the extruder moves in the time that it takes
                                                              // for the powder to fall and start hitting the plate.
@@ -849,7 +851,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
  
          // Include some useful info on type of path
          if (next_distance_remaining > 0)  {
-            double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
              *output_stream << "; Multipath extrusion of distance: " << total_distance_remaining << " mm" << new_line;
          } else if (next_distance_remaining <=0) {
             *output_stream << "; SINGLE line extrusion: " << diff_length << " mm" << new_line;
@@ -859,7 +860,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
          // Determine amount to extrude
-         if (t0 > extruder_latency) 
+         if (total_time_remaining > extruder_latency) 
          {
             // Calculate the NEW E-value... to just extrude
             premove_extrude = tr * (new_e_value - current_e_value);
