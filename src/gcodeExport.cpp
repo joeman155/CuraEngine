@@ -620,8 +620,8 @@ void GCodeExport::writeTravel(const Point& p, const Velocity& speed)
 void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining, int last_move)
 {
     writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining, last_move);
-*output_stream << "lm: " << last_move  << new_line;
-*output_stream << "ndr: " << next_distance_remaining << new_line;
+// *output_stream << "lm: " << last_move  << new_line;
+// *output_stream << "ndr: " << next_distance_remaining << new_line;
 }
 
 void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
@@ -850,11 +850,11 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          // Include some useful info on type of path
          if (next_distance_remaining > 0)  {
             double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
-//             *output_stream << "; Multipath extrusion of distance: " << total_distance_remaining << " mm" << new_line;
+             *output_stream << "; Multipath extrusion of distance: " << total_distance_remaining << " mm" << new_line;
          } else if (next_distance_remaining <=0) {
-//            *output_stream << "; SINGLE line extrusion: " << diff_length << " mm" << new_line;
+            *output_stream << "; SINGLE line extrusion: " << diff_length << " mm" << new_line;
          } else {
-//            *output_stream << "; OTHER line extrusion of distance: " << INT2MM(next_distance_remaining) << " mm" << new_line;
+            *output_stream << "; OTHER line extrusion of distance: " << INT2MM(next_distance_remaining) << " mm" << new_line;
          }
 
 
@@ -914,11 +914,6 @@ if (next_distance_remaining < 0) {
      {
          // The NEXT move after this is greater than extruder_latency, which means we don't have to 
          // worry about finishing the whole "move" this time.
-
-
-         // Because the next_distance_remaining > extruder_latency...we need to ensure the Extruder is fully primed
-         // with powder at the end of this move.
-         // double prime_amount = double(extruder_latency) * despeed;
 
          // Second Move (E and x and y)
 
@@ -1465,6 +1460,8 @@ void GCodeExport::primeExtruder(double prime_amount)
     current_e_value_abs += prime_amount;
     *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
 
+    // Pause a little... to wait for all powder to drop out
+    *output_stream << "G4 P500" << new_line;
 
 }
  
