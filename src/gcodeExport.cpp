@@ -1511,7 +1511,9 @@ void GCodeExport::disEngageMotor()
    // double e_per_revolution = M_PI * 10.9000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
    // double e_per_revolution = 34.17335;   // Determined by trial and error.
    // double e_per_revolution = 34.5;   // Determined by trial and error.
-   double e_per_revolution = 34.41126;
+   // double e_per_revolution = 34.41126;
+   // double e_per_revolution = 34.4187484418598;
+   double e_per_revolution = 34.41817864129;
    double e_half_turn = e_per_revolution / 2;     // Helpers
    double e_quarter_turn = e_per_revolution / 4;  // Helpers
    double e_offset = e_per_revolution * (angle_offset / 360);
