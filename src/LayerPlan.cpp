@@ -1680,28 +1680,27 @@ if (path.points.size() > 0 )
 {
    distance_remaining = 0;
    last_move = 0;
-   for (unsigned int p_idx = point_idx+1; p_idx < path.points.size(); p_idx++) 
+   for (unsigned int p_idx = point_idx; p_idx < path.points.size()-1; p_idx++) 
    {
       // Convert from microns to mm...so we don't exceed max value of int
-      xx = (path.points[p_idx].X - path.points[p_idx-1].X)/1000;
-      yy = (path.points[p_idx].Y - path.points[p_idx-1].Y)/1000 ;
+      xx = (path.points[p_idx].X - path.points[p_idx+1].X)/10;
+      yy = (path.points[p_idx].Y - path.points[p_idx+1].Y)/10 ;
       distance_remaining = distance_remaining + pow(xx * xx + yy * yy, 0.5);
    }
 }
 
 // Convert back to microns. Yes, we do lose some precision due to rounding, but we hope this will be minimal.
-distance_remaining = distance_remaining * 1000;  // Convert back to microns.
+distance_remaining = distance_remaining * 10;  // Convert back to microns.
 
 
 log("At Point %d (out of %d) Distance remaining: %f\n", point_idx, path.points.size(), distance_remaining);
 
 // Work out if we on the last move
-// if (point_idx == path.points.size() - 1) {
-//    last_move = 1;
-// } else {
-//    last_move = 0;
-// }
-// last_move = path.points[point_idx].Y;
+if (point_idx == path.points.size() - 1) {
+    last_move = 1;
+ } else {
+    last_move = xx;
+ }
 
                         // gcode.writeExtrusionX(path.points[point_idx], speed, path.getExtrusionMM3perMM(), path.config->type, update_extrusion_offset, distance_remaining);
                         gcode.writeExtrusion(path.points[point_idx], speed, path.getExtrusionMM3perMM(), path.config->type, update_extrusion_offset, distance_remaining, last_move);

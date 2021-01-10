@@ -45,7 +45,6 @@ GCodeExport::GCodeExport()
 
     premove_extrude= 0; // Amount of material extruded in PRE-MOVE. This is also used to identify is pre-extrude
                         // has already occured and is used to work out how much LESS to extrude at the end.
-    finishing_up = 0;   // If 0, we are not finishing up... if 1...we are finishing up.
     current_e_value = 0;
     current_e_value_abs = 0;
     current_extruder = 0;
@@ -832,7 +831,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double e_delta = new_e_value - current_e_value;
       double d0 = diff_length;              // Distance we move in x, y, z
       double t0 = d0 / speed;               // Time to do original move without compensation (seconds)
-      double tr = extruder_latency / t0;    // tr = Time Ratio
       double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
       double total_time_remaining = total_distance_remaining / speed;
 
@@ -843,6 +841,14 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double despeed = (new_e_value - current_e_value) / t0;   // mm/sec
       Velocity espeed = Velocity(despeed);
 
+      // Current Position
+      Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
+
+
+
+// *output_stream << "diff_length: " << diff_length << new_line;
+// *output_stream << "total_time_remaining: " << total_time_remaining << new_line;
+// *output_stream << "total_distance_remaining: " << total_distance_remaining << new_line;
 
       // See if we need to start extrusion... WE ALWAYS need to extrude ONLY before starting a move
       // UNLESS extrusion has already started.
@@ -860,15 +866,21 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
          // Determine amount to extrude
+         // Here we manage the case where...TOTAL Time to extrude > extruder latency
+         //
+         // Think for a second....
+         // This includes scenarion were for THIS move, the amount to extrude may be small... 
+         // because it is a ShORT distance... It might be a LOT of small moves...which has a 
+         // total time remaining > extruder latency
+         //
          if (total_time_remaining > extruder_latency) 
          {
             // Calculate the NEW E-value... to just extrude
-            premove_extrude = tr * (new_e_value - current_e_value);
-            double ext_move = premove_extrude + current_e_value;
+            premove_extrude = despeed * extruder_latency; // More intuituve form... same result
+            double ext_move = current_e_value + premove_extrude;
 
             *output_stream << "G1";
             writeFE(espeed, ext_move, feature);
-//*output_stream << "; Full extrude" << new_line;
          }
          else
          {
@@ -886,7 +898,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
             *output_stream << "G1";
             writeFE(espeed, e1, feature);
  
-//*output_stream << "; Partial extrude" << new_line;
+*output_stream << "; Partial extrude" << new_line;
 
             // Generate G-Code command to wait for powder to hit plate.
             // Multiple by 1000 to convert seconds to milliseconds
@@ -899,22 +911,11 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
 
-
-/*
-*output_stream << "diff_length: "<< diff_length << new_line;
-if (next_distance_remaining < 0) {
-   *output_stream << "next_distance_remaining: 0 mm" << new_line;
-} else {
-   *output_stream << "next_distance_remaining: " << INT2MM(next_distance_remaining) << " mm" << new_line;
-}
-*output_stream << "extruder_distance, finishing_up: " << extruder_distance << ", " << finishing_up << new_line;
-*/
-
      // See how we want to proceed with the G-Codes
      if (INT2MM(next_distance_remaining) > extruder_distance)
      {
          // The NEXT move after this is greater than extruder_latency, which means we don't have to 
-         // worry about finishing the whole "move" this time.
+         // worry about finishing the whole "move" this time. THIS IS EASY CASE
 
          // Second Move (E and x and y)
 
@@ -924,106 +925,123 @@ if (next_distance_remaining < 0) {
 
          *output_stream << "G1";
          writeFXYZE(speed, x, y, z, ext_move, feature);
-// *output_stream << "; Continuing to extrude...." << new_line;
-
      } 
-     else
+     else if (next_distance_remaining > 0 && INT2MM(next_distance_remaining) < extruder_distance && total_distance_remaining > extruder_distance)
      {
-        // NEXT_DISTANCE_REMAINING < EXTRUDER_DISTANCE AMOUNT
-        // next_distance_remaining < 0 (-1) indicates SINGLE extrusion...not multi-move
-        if (finishing_up == 1 || next_distance_remaining < 0  || next_distance_remaining == 0)
+
+        // Situation: Some movement(s) after this, (but less than extruder length). TOTAL distance to move requires SOME extrusion.
+        // 
+        // Considering JUST this move, possible scenarios are:-
+        //       a. This move < extruder_length
+        //       b. This move > extruder length 
+
+
+
+        // NOTE: There could be several more moves after this...but total movement of all these 
+        //       moves is under extruder_length
+        //
+
+
+        // Calculate theoretical extrude amount in  REMAINING Moves (note PLURAL HERE)
+        double e3_next = e_delta * (INT2MM(next_distance_remaining) / diff_length);
+
+
+        double e_total = e_delta + e3_next; // TOTAL amount of material to extrude from this move to the end.
+        double e3 = e_total - premove_extrude;
+        double t_extrude = e3 / despeed;
+        // Here, we have already PRE extruded premove_extrude...so we deduct that... then we divide by speed 
+        // So we know how much TIME must be spent
+ 
+        
+        // We are handling scenario for next_distance_remaining < extruder_distance, Where extruder_distance
+        // The MAX x,y distance we can move without extruding.
+        // t_extrude = e_total - premove_extrude = e_delta + e3_next - premove_extrude
+        // ASSUME a full PRE-EXTRUDE, then e3_next < premove_extrude
+        // This means amount to extrude is less than e_delta...which means t_extrude is less than t0.
+
+
+        // TODO - Handle where we had a PARTIAL extrude.
+
+
+        // e3_next is is for distance less than that covered by premove_extrude (where the preextrude move is a FULL PreExtrude)
+        // This is because we ha
+
+        // Deduce timing and new position
+        double x3 = cp.x + (x - cp.x) * t_extrude / t0;
+        double y3 = cp.y + (y - cp.y) * t_extrude / t0;
+        double z3 = cp.z + (z - cp.z) * t_extrude / t0;
+        e3 = current_e_value + e3;
+
+        // We are deliberately removing the additional primed material from the end....because we don't want to
+        // extrude more than we were meant to!
+        // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
+        // double e3 = new_e_value - premove_extrude + e3_next;
+
+        *output_stream <<  "; Last Extrude" << new_line;
+        *output_stream << "G1";
+        writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+        // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
+        *output_stream << "G1";
+        writeFXYZE(speed, x, y, z, e3, feature);
+
+     }
+     else  
+     {
+        // Possible scenarios are:-
+        // 1. No movement after this move.
+        //       a. This move < extruder_length 
+        //       b. This move > extruder length  
+        // 
+        // 2. More movements after this... and TOTAL length to move < extrusion_length. i.e. no more extrusion require.
+        // 
+
+
+        // Only run code here if we still need to extrude.
+        if (total_distance_remaining > extruder_distance)
         {
-           // finishing_up flag indicates that there is NO MORE EXTRUSION....
-           if (finishing_up != 1) 
-           {
-              // Not finishing up this time....so we continue to extrude
-              // There are no more moves after this one
-              // We need to work out WHERE to extrude up until.
-              Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
-              double t3 = t0 - extruder_latency; 
-
-              double x3 = cp.x + (x - cp.x) * t3 / t0;
-              double y3 = cp.y + (y - cp.y) * t3 / t0;
-              double z3 = cp.z + (z - cp.z) * t3 / t0;
-              double e3 = new_e_value - premove_extrude;
-  
-              *output_stream << "G1";
-              writeFXYZE(speed, x3, y3, z3, e3, feature);
-// *output_stream << "; Last Extrude" << new_line;
-           }
-
-
-           // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
-           double e3 = current_e_value;
-           *output_stream << "G1";
-           writeFXYZE(speed, x, y, z, e3, feature);
-
-         
-           // ONLY finish up if there is definitely no more moving after this move.
-           if (next_distance_remaining < 0  || next_distance_remaining == 0) 
-           {
-              finishing_up = 0;
-              premove_extrude = 0;
-              *output_stream << "; Finished up." << new_line;
-           } else {
-              *output_stream << "; Finishing up..." << new_line;
-           }
-        }
-        else 
-        {
-           // There are some subsequent moves and we need to take this into consideration
-           // i.e. we need to spend 'extruder_latency' time moving WITHOUT extruding and this
-           // time is split across the CURRENT move and the NEXT move(s). We need to get the split right.
-
-
-           // Current Position
+           // We need to work out WHERE to extrude up until ... within this move ...
            Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
+           double t3 = t0 - extruder_latency; 
 
-           double t0_next = 0;
-           // Time to be spent on subsequent moves...
-           if (next_distance_remaining > 0) {
-              t0_next = INT2MM(next_distance_remaining) / speed;
-           }
-
-           // Deduce timing and new position
-           double t3 = t0 + t0_next - extruder_latency;
            double x3 = cp.x + (x - cp.x) * t3 / t0;
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
-
-           // Calculate theoretical extrude amount in next move
-           double e3_next = (new_e_value - current_e_value) * (INT2MM(next_distance_remaining) / diff_length);
-// *output_stream << "e3_next: " << e3_next << new_line;
-
-           // We are deliberately removing the additional primed material from the end....because we don't want to
-           // extrude more than we were meant to!
-           // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
-           double e3 = new_e_value - premove_extrude + e3_next;
-
+           double e3 = new_e_value - premove_extrude;
+  
+           *output_stream << "; Last Extrude" << new_line;
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
-// *output_stream << "; test4" << new_line;
-
-           // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
-           *output_stream << "G1";
-           writeFXYZE(speed, x, y, z, e3, feature);
-// *output_stream << "; test5" << new_line;
+        }
 
 
-           finishing_up = 1; // So that next time...we do not extrude...we just MOVE the PD.
+        // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
+        double e3 = current_e_value;
+        *output_stream << "G1";
+        writeFXYZE(speed, x, y, z, e3, feature);
+
+         
+        // We only want to finish up if we are indeed on the LAST move.
+        if (next_distance_remaining <= 0)
+        {
+          premove_extrude = 0;
+          *output_stream << "; Finished up. next_distance_remaining: " << next_distance_remaining << new_line;
+        }
+        else
+        {
+          *output_stream << "; Still finishing..." << new_line;
         }
      }
-
-
-
-    } else {
-       // Get to this point if there is nothig to extrude, or if the latency setting is zero. i.e. STANDARD FUNCTIONALITY
-       *output_stream << "G1";
-       writeFXYZE(speed, x, y, z, new_e_value, feature);
-//       *output_stream << "; test8" << new_line;
-
-
+   } 
+   else 
+   {
+     // Get to this point if there is nothig to extrude, or if the latency setting is zero. i.e. STANDARD FUNCTIONALITY
+     *output_stream << "G1";
+     writeFXYZE(speed, x, y, z, new_e_value, feature);
     }
+
+
+
 
 log("\n\n\n");
 
@@ -1540,7 +1558,7 @@ void GCodeExport::disEngageMotor()
    current_e_value_abs += e_move;
 
    *output_stream << "G1 E" << current_e_value << " F500" << new_line;
-   *output_stream << "; current_e_value_abs = " << current_e_value_abs << new_line;
+   *output_stream << "; Acurrent_e_value_abs = " << current_e_value_abs << new_line;
 
 
    current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
@@ -1557,6 +1575,7 @@ void GCodeExport::disEngageMotor()
    current_e_value_abs += e_move;
 
    *output_stream << "G1 E" << current_e_value << " F500" << new_line;
+   *output_stream << "; Zcurrent_e_value_abs = " << current_e_value_abs << new_line;
 
    current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
    log("AFTER SECOND_MOVE: %f\n", current_angle);
