@@ -977,7 +977,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
         // double e3 = new_e_value - premove_extrude + e3_next;
 
-        *output_stream <<  "; Last Extrude" << new_line;
+        *output_stream <<  "; Last Extrude..." << new_line;
         *output_stream << "G1";
         writeFXYZE(speed, x3, y3, z3, e3, feature);
 
@@ -1007,9 +1007,9 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double x3 = cp.x + (x - cp.x) * t3 / t0;
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
-           double e3 = new_e_value - premove_extrude;
+           double e3 = new_e_value;   // We still want the E value to be the same at the end. 
   
-           *output_stream << "; Last Extrude" << new_line;
+           *output_stream << "; Last Extrude...." << new_line;
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
         }
@@ -1531,7 +1531,9 @@ void GCodeExport::disEngageMotor()
    // double e_per_revolution = 34.5;   // Determined by trial and error.
    // double e_per_revolution = 34.41126;
    // double e_per_revolution = 34.4187484418598;
-   double e_per_revolution = 34.41817864129;
+   // double e_per_revolution = 34.41817864129;
+   // double e_per_revolution = 34.41126;
+   double e_per_revolution = 34.40916795;
    double e_half_turn = e_per_revolution / 2;     // Helpers
    double e_quarter_turn = e_per_revolution / 4;  // Helpers
    double e_offset = e_per_revolution * (angle_offset / 360);
