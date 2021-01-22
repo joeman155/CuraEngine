@@ -1479,6 +1479,14 @@ void GCodeExport::primeExtruder(double prime_amount)
     current_e_value_abs += prime_amount;
     *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
 
+
+// The next two moves are to stop us hitting the container.
+    // Move Z axis a little... so we can hop over things.
+    *output_stream << "G1 Z60 F1500" << new_line;
+    
+    // Move to the CENTRE....so we are well and truely in the print zone.
+    *output_stream << "G1 X100 Y100 F1500" << new_line;
+    
     // Pause a little... to wait for all powder to drop out
     *output_stream << "G4 P500" << new_line;
 
