@@ -1460,7 +1460,7 @@ void GCodeExport::primeExtruder(double prime_amount, int prime_start_x, int prim
     // Prime a little
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F400" << new_line;
 
     // Move left a little
     // *output_stream << "G1 X12 F250" << new_line;
@@ -1468,7 +1468,7 @@ void GCodeExport::primeExtruder(double prime_amount, int prime_start_x, int prim
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F400" << new_line;
 
     // Move left a little
     // *output_stream << "G1 X14 F250" << new_line;
@@ -1476,7 +1476,7 @@ void GCodeExport::primeExtruder(double prime_amount, int prime_start_x, int prim
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F400" << new_line;
 
     // Move left a little
     // *output_stream << "G1 X16 F250" << new_line;
@@ -1484,7 +1484,7 @@ void GCodeExport::primeExtruder(double prime_amount, int prime_start_x, int prim
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F400" << new_line;
 
 
 // The next two moves are to stop us hitting the container.
