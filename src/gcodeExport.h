@@ -452,7 +452,7 @@ private:
      * returning the Auger back to the station
      * This code handles this.
      */
-    void disEngageMotor();
+    void disEngageMotor(int x, int y);
 
 
     /*!

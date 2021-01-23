@@ -1510,6 +1510,11 @@ void GCodeExport::finishExtruder()
 
     const std::string end_code = old_extruder_settings.get<std::string>("machine_extruder_end_code");
 
+    const double prime_start_x = old_extruder_settings.get<double>("machine_extruder_prime_start_x");
+
+    const double prime_start_y = old_extruder_settings.get<double>("machine_extruder_prime_start_y");
+
+
     if(!end_code.empty() && !pre_end_code.empty())
     {
         if (relative_extrusion)
@@ -1520,8 +1525,9 @@ void GCodeExport::finishExtruder()
         // Move to dump location
         writeCode(pre_end_code.c_str());
 
+
         // New code to ensure we can disEngage motor from the Extruder Mechanism - METAL
-        disEngageMotor();
+        disEngageMotor(prime_start_x, prime_start_y);
 
         writeCode(end_code.c_str());
 
@@ -1534,7 +1540,7 @@ void GCodeExport::finishExtruder()
 }
 
 
-void GCodeExport::disEngageMotor()
+void GCodeExport::disEngageMotor(int x, int y)
 {
 
    log("Doing Motor Dis-engage...\n");
@@ -1564,6 +1570,10 @@ void GCodeExport::disEngageMotor()
    // Work out how far to move back to position where the AUGER contact points will be aligned along the X-Axis.
    e_move = e_move + e_quarter_turn - e_offset;
 
+
+   // Move to position...
+   *output_stream << "; Moving to position before zeroing extruder" << new_line;
+   *output_stream << "G1 X" << x << " Y" << y << " F1500" << new_line;
 
 
    double current_angle = (current_e_value_abs / e_per_revolution - int(current_e_value_abs / e_per_revolution)) * 360;
@@ -1625,6 +1635,10 @@ void GCodeExport::switchExtruder(size_t new_extruder, const RetractionConfig& re
 
     const std::string end_code = old_extruder_settings.get<std::string>("machine_extruder_end_code");
 
+    const double prime_start_x = old_extruder_settings.get<double>("machine_extruder_prime_start_x");
+
+    const double prime_start_y = old_extruder_settings.get<double>("machine_extruder_prime_start_y");
+
     if(!end_code.empty() && !pre_end_code.empty())
     {
         if (relative_extrusion)
@@ -1636,7 +1650,7 @@ void GCodeExport::switchExtruder(size_t new_extruder, const RetractionConfig& re
         writeCode(pre_end_code.c_str());
 
         // New code to ensure we can disEngage motor from the Extruder Mechanism - METAL
-        disEngageMotor();
+        disEngageMotor(prime_start_x, prime_start_y);
 
         writeCode(end_code.c_str());
 
