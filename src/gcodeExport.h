@@ -459,7 +459,7 @@ private:
      * We need to rotate the stepper motor to engage it with the Auger. Needs to be primed.
      *
      */
-    void primeExtruder(double prime_amount);
+    void primeExtruder(double prime_amount, int prime_start_x, int prime_start_y);
 
 
 public:

@@ -1415,6 +1415,8 @@ void GCodeExport::startExtruder(const size_t new_extruder)
 
     const std::string start_code = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<std::string>("machine_extruder_start_code");
     const double prime_amount = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<double>("machine_extruder_prime_amount");
+    const double prime_start_x = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<double>("machine_extruder_prime_start_x");
+    const double prime_start_y = Application::getInstance().current_slice->scene.extruders[new_extruder].settings.get<double>("machine_extruder_prime_start_y");
    
 
     if(!start_code.empty())
@@ -1426,7 +1428,7 @@ void GCodeExport::startExtruder(const size_t new_extruder)
 
         writeCode(start_code.c_str());
 
-        primeExtruder(prime_amount);
+        primeExtruder(prime_amount, prime_start_x, prime_start_y);
 
         if (relative_extrusion)
         {
@@ -1444,40 +1446,45 @@ void GCodeExport::startExtruder(const size_t new_extruder)
 }
 
 
-void GCodeExport::primeExtruder(double prime_amount)
+void GCodeExport::primeExtruder(double prime_amount, int prime_start_x, int prime_start_y)
 {
+
+    int y_end = prime_start_y - 20;
 
     // Move to the very right, to where we start the prime
     *output_stream << "G1 X10 F1500" << new_line;
 
+    // Move to starting position
+    *output_stream << "G1 X" << prime_start_x << " Y" << prime_start_y << " F1500" << new_line;
+
     // Prime a little
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X12 F250" << new_line;
+    // *output_stream << "G1 X12 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X14 F250" << new_line;
+    // *output_stream << "G1 X14 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y60 E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << y_end << " E" << current_e_value << " F1500" << new_line;
 
     // Move left a little
-    *output_stream << "G1 X16 F250" << new_line;
+    // *output_stream << "G1 X16 F250" << new_line;
 
     // Prime a little more.
     current_e_value += prime_amount;
     current_e_value_abs += prime_amount;
-    *output_stream << "G1 Y157 E" << current_e_value << " F1500" << new_line;
+    *output_stream << "G1 Y" << prime_start_y << " E" << current_e_value << " F1500" << new_line;
 
 
 // The next two moves are to stop us hitting the container.
