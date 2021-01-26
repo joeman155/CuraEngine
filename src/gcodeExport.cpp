@@ -915,23 +915,22 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
      // See how we want to proceed with the G-Codes
      if (INT2MM(next_distance_remaining) > extruder_distance)
      {
-         // The NEXT move after this is greater than extruder_latency, which means we don't have to 
-         // worry about finishing the whole "move" this time. THIS IS EASY CASE
+        // The NEXT move after this is greater than extruder_latency, which means we don't have to 
+        // worry about finishing the whole "move" this time. THIS IS EASY CASE
 
-         // Second Move (E and x and y)
+        // Second Move (E and x and y)
 
-         // We are already primed ahead of the actual amount we want to extrude...but because we have a long
-         // way to go, we just keep extruding amount required at each path.
-         double ext_move = current_e_value + e_delta;
+        // We are already primed ahead of the actual amount we want to extrude...but because we have a long
+        // way to go, we just keep extruding amount required at each path.
+        double ext_move = current_e_value + e_delta;
 
-         // Get position BEFORE move
-         Point3 cp1 = currentPosition;
+        // Get position BEFORE move
+        Point3 cp1 = currentPosition;
   
+        // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, e_delta);
-           *output_stream << "; NEW SPEED FACTOR1: " << factor << new_line;
-           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x, y, z, ext_move, feature);
@@ -941,11 +940,11 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
           writeFXYZE(speed, x, y, z, ext_move, feature);
         }
 
-         // Calulate Fxy speed if not already known
-         if (Fxy == 0) {
+        // Calulate Fxy speed if not already known
+        if (Fxy == 0) {
             Fxy = effectiveSpeed (cp1, x, y, e_delta, speed);
-            *output_stream << "; Fxy is: " << Fxy << new_line;
-         }
+            // *output_stream << "; Fxy is: " << Fxy << new_line;
+        }
 
      } 
      else if (next_distance_remaining > 0 && INT2MM(next_distance_remaining) < extruder_distance && total_distance_remaining > extruder_distance)
@@ -1005,11 +1004,10 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         *output_stream <<  "; Last Extrude..." << new_line;
 
 
+        // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x3, y3, 0);
-           *output_stream << "; NEW SPEED FACTOR2: " << factor << new_line;
-           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
@@ -1021,14 +1019,13 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // Calulate Fxy speed if not already known
         if (Fxy == 0) {
             Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
-           *output_stream << "; Fxy is: " << Fxy << new_line;
+           // *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
+        // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, 0);
-           *output_stream << "; NEW SPEED FACTOR3: " << factor << new_line;
-           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x, y, z, e3, feature);
@@ -1068,14 +1065,10 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
            *output_stream << "; Last Extrude...." << new_line;
 
+           // If we already have XY speed, then we want to ensure remaining moves have speed enforced
            if (Fxy > 0) {
               cp1 = currentPosition;
               double factor = totalSpeedFactor (cp1, x3, y3, e_change);
-
-*output_stream << " x, y, cpx, cpz = " << x << ", " << y << ", " << cp1.x << ", " << cp1.y << new_line;
-*output_stream << "; e_change: " << e_change << new_line;
-              *output_stream << "; NEW SPEED FACTOR4: " << factor << new_line;
-              *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
 
               *output_stream << "G1";
               writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
@@ -1087,7 +1080,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            // Calulate Fxy speed if not already known
            if (Fxy == 0) {
               Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
-              *output_stream << "; Fxy is: " << Fxy << new_line;
+              // *output_stream << "; Fxy is: " << Fxy << new_line;
            }
 
         }
@@ -1100,12 +1093,10 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         double e3 = current_e_value;
 
 
-
+        // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, 0);
-           *output_stream << "; NEW SPEED FACTOR5: " << factor << new_line;
-           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x, y, z, e3, feature);
@@ -1117,7 +1108,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // Calulate Fxy speed if not already known
         if (Fxy == 0) {
             Fxy = effectiveSpeed (cp1, x, y, 0, speed);
-           *output_stream << "; Fxy is: " << Fxy << new_line;
+           // *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
          
