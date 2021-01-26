@@ -828,28 +828,39 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
    if (extruder_latency > 0 && new_e_value - current_e_value > 0) 
    {
 
-      // Get some details of the move
-      double e_delta = new_e_value - current_e_value;
-      double d0 = diff_length;              // Distance we move in x, y, z
-      double t0 = d0 / speed;               // Time to do original move without compensation (seconds)
-      double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
-      double total_time_remaining = total_distance_remaining / speed;
-
-      double extruder_distance = speed * extruder_latency;   // Distance the extruder moves in the time that it takes
-                                                             // for the powder to fall and start hitting the plate.
-
-      // Calculate speed at which we need to EXTRUDE this material
-      double despeed = (new_e_value - current_e_value) / t0;   // mm/sec
-      Velocity espeed = Velocity(despeed);
-
       // Current Position
       Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
 
+      // Get the change in E required
+      double e_delta = new_e_value - current_e_value;
+
+      // Calculate effective X/Y speed.
+      Fxy = effectiveSpeed (cp, x, y, e_delta, speed);
+
+      // Time to do the move
+      double t0 = diff_length / Fxy;    // Time in seconds
+
+      // TOTAL distance for these connected moves. 
+      double total_distance_remaining = INT2MM(next_distance_remaining) + diff_length;         
+      double total_time_remaining = total_distance_remaining / Fxy; // Assumes instant acceleration...
+
+      // Distance the extruder moves in the time that it takes for the powder to fall and start hitting the plate.
+      double extruder_distance = Fxy * extruder_latency;   
+
+      // Calculate speed at which we need to EXTRUDE this material
+      double despeed = e_delta / t0; // mm/second
+      Velocity espeed = Velocity(despeed);
 
 
-// *output_stream << "diff_length: " << diff_length << new_line;
-// *output_stream << "total_time_remaining: " << total_time_remaining << new_line;
-// *output_stream << "total_distance_remaining: " << total_distance_remaining << new_line;
+
+// *output_stream << "; diff_length (First Move - mm): " << diff_length << new_line;
+// *output_stream << "; Fxy (Effective XY Speed - mm/sec): " << Fxy << new_line;
+// *output_stream << "; total_distance_remaining (Whole Path - mm): " << total_distance_remaining << new_line;
+// *output_stream << "; total_time_remaining (whole Path - seconds): " << total_time_remaining << new_line;
+// *output_stream << "; t0 (Time in second to do FIRST move): " << t0 << new_line;
+// *output_stream << "; despeed (mm/sec of extrusion): " << despeed << new_line;
+// *output_stream << "; extruder_distance (Distance in mm the extruder moves (x,y) during complete prime): " << extruder_distance << new_line;
+
 
       // See if we need to start extrusion... WE ALWAYS need to extrude ONLY before starting a move
       // UNLESS extrusion has already started.
@@ -899,7 +910,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
             *output_stream << "G1";
             writeFE(espeed, e1, feature);
  
-*output_stream << "; Partial extrude" << new_line;
+            *output_stream << "; Partial extrude" << new_line;
 
             // Generate G-Code command to wait for powder to hit plate.
             // Multiple by 1000 to convert seconds to milliseconds
@@ -924,12 +935,9 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // way to go, we just keep extruding amount required at each path.
         double ext_move = current_e_value + e_delta;
 
-        // Get position BEFORE move
-        Point3 cp1 = currentPosition;
-  
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
-           cp1 = currentPosition;
+           Point3 cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, e_delta);
 
            *output_stream << "G1";
@@ -938,12 +946,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         } else {
           *output_stream << "G1";
           writeFXYZE(speed, x, y, z, ext_move, feature);
-        }
-
-        // Calulate Fxy speed if not already known
-        if (Fxy == 0) {
-            Fxy = effectiveSpeed (cp1, x, y, e_delta, speed);
-            // *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
      } 
@@ -998,15 +1000,12 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
         // double e3 = new_e_value - premove_extrude + e3_next;
 
-         // Get position BEFORE move
-         Point3 cp1 = currentPosition;
  
         *output_stream <<  "; Last Extrude..." << new_line;
 
-
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
-           cp1 = currentPosition;
+           Point3 cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x3, y3, 0);
 
            *output_stream << "G1";
@@ -1016,15 +1015,9 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            writeFXYZE(speed, x3, y3, z3, e3, feature);
         }
 
-        // Calulate Fxy speed if not already known
-        if (Fxy == 0) {
-            Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
-           // *output_stream << "; Fxy is: " << Fxy << new_line;
-        }
-
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
-           cp1 = currentPosition;
+           Point3 cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, 0);
 
            *output_stream << "G1";
@@ -1060,14 +1053,12 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double e3 = new_e_value;   // We still want the E value to be the same at the end. 
            double e_change = new_e_value - current_e_value;
   
-           // Get position BEFORE move
-           Point3 cp1 = currentPosition;
 
            *output_stream << "; Last Extrude...." << new_line;
 
            // If we already have XY speed, then we want to ensure remaining moves have speed enforced
            if (Fxy > 0) {
-              cp1 = currentPosition;
+              Point3 cp1 = currentPosition;
               double factor = totalSpeedFactor (cp1, x3, y3, e_change);
 
               *output_stream << "G1";
@@ -1076,18 +1067,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
               *output_stream << "G1";
               writeFXYZE(speed, x3, y3, z3, e3, feature);
             }
-
-           // Calulate Fxy speed if not already known
-           if (Fxy == 0) {
-              Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
-              // *output_stream << "; Fxy is: " << Fxy << new_line;
-           }
-
         }
 
-
-        // Get position BEFORE move
-        Point3 cp1 = currentPosition;
 
         // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
         double e3 = current_e_value;
@@ -1095,7 +1076,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
-           cp1 = currentPosition;
+           Point3 cp1 = currentPosition;
            double factor = totalSpeedFactor (cp1, x, y, 0);
 
            *output_stream << "G1";
@@ -1103,12 +1084,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         } else {
            *output_stream << "G1";
            writeFXYZE(speed, x, y, z, e3, feature);
-        }
-
-        // Calulate Fxy speed if not already known
-        if (Fxy == 0) {
-            Fxy = effectiveSpeed (cp1, x, y, 0, speed);
-           // *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
          
@@ -1262,6 +1237,21 @@ double GCodeExport::effectiveSpeed(const Point3& cp1, const int x, const int y, 
    return effective_speed;
 }
 
+
+double GCodeExport::totalTime(const Point3& cp, const int x, const int y, const double e,  double speed)
+{
+   double total_time;
+
+   double dx, dy, de;
+
+   dx = INT2MM(x) - INT2MM(cp.x);
+   dy = INT2MM(y) - INT2MM(cp.y);
+   de = e;
+
+   total_time = sqrt(dx * dx + dy * dy + de * de) / speed;
+
+   return total_time;
+}
 
 
 double GCodeExport::totalSpeedFactor(const Point3& cp1, const int x, const int y, const double e)

@@ -427,6 +427,12 @@ private:
     double totalSpeedFactor(const Point3& cp1, const int x, const int y, const double e);
 
 
+    /*!
+     * Given move, work out time to do the move
+     *
+    */
+    double totalTime(const Point3& cp, const int x, const int y, const double e,  double speed);
+
 
    /*!
      * Write the F, X, Y, Z and E value (if they are not different from the last)
