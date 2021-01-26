@@ -927,12 +927,23 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          // Get position BEFORE move
          Point3 cp1 = currentPosition;
   
-         *output_stream << "G1";
-         writeFXYZE(speed, x, y, z, ext_move, feature);
+        if (Fxy > 0) {
+           cp1 = currentPosition;
+           double factor = totalSpeedFactor (cp1, x, y, e_delta);
+           *output_stream << "; NEW SPEED FACTOR1: " << factor << new_line;
+           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
+
+           *output_stream << "G1";
+           writeFXYZE(Velocity(Fxy * factor), x, y, z, ext_move, feature);
+
+        } else {
+          *output_stream << "G1";
+          writeFXYZE(speed, x, y, z, ext_move, feature);
+        }
 
          // Calulate Fxy speed if not already known
          if (Fxy == 0) {
-            Fxy = 60 * effectiveSpeed (cp1, x, y, e_delta, speed);
+            Fxy = effectiveSpeed (cp1, x, y, e_delta, speed);
             *output_stream << "; Fxy is: " << Fxy << new_line;
          }
 
@@ -992,18 +1003,40 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          Point3 cp1 = currentPosition;
  
         *output_stream <<  "; Last Extrude..." << new_line;
-        *output_stream << "G1";
-        writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+
+        if (Fxy > 0) {
+           cp1 = currentPosition;
+           double factor = totalSpeedFactor (cp1, x3, y3, 0);
+           *output_stream << "; NEW SPEED FACTOR2: " << factor << new_line;
+           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
+
+           *output_stream << "G1";
+           writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
+        } else {
+           *output_stream << "G1";
+           writeFXYZE(speed, x3, y3, z3, e3, feature);
+        }
 
         // Calulate Fxy speed if not already known
         if (Fxy == 0) {
-            Fxy = 60 * effectiveSpeed (cp1, x, y, e_change, speed);
+            Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
            *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
-        // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
-        *output_stream << "G1";
-        writeFXYZE(speed, x, y, z, e3, feature);
+        if (Fxy > 0) {
+           cp1 = currentPosition;
+           double factor = totalSpeedFactor (cp1, x, y, 0);
+           *output_stream << "; NEW SPEED FACTOR3: " << factor << new_line;
+           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
+
+           *output_stream << "G1";
+           writeFXYZE(Velocity(Fxy * factor), x, y, z, e3, feature);
+        } else {
+           // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
+           *output_stream << "G1";
+           writeFXYZE(speed, x, y, z, e3, feature);
+        }
 
      }
      else  
@@ -1034,12 +1067,26 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            Point3 cp1 = currentPosition;
 
            *output_stream << "; Last Extrude...." << new_line;
-           *output_stream << "G1";
-           writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+           if (Fxy > 0) {
+              cp1 = currentPosition;
+              double factor = totalSpeedFactor (cp1, x3, y3, e_change);
+
+*output_stream << " x, y, cpx, cpz = " << x << ", " << y << ", " << cp1.x << ", " << cp1.y << new_line;
+*output_stream << "; e_change: " << e_change << new_line;
+              *output_stream << "; NEW SPEED FACTOR4: " << factor << new_line;
+              *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
+
+              *output_stream << "G1";
+              writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
+            } else {
+              *output_stream << "G1";
+              writeFXYZE(speed, x3, y3, z3, e3, feature);
+            }
 
            // Calulate Fxy speed if not already known
            if (Fxy == 0) {
-              Fxy = 60 * effectiveSpeed (cp1, x, y, e_change, speed);
+              Fxy = effectiveSpeed (cp1, x, y, e_change, speed);
               *output_stream << "; Fxy is: " << Fxy << new_line;
            }
 
@@ -1051,12 +1098,25 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
         // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
         double e3 = current_e_value;
-        *output_stream << "G1";
-        writeFXYZE(speed, x, y, z, e3, feature);
+
+
+
+        if (Fxy > 0) {
+           cp1 = currentPosition;
+           double factor = totalSpeedFactor (cp1, x, y, 0);
+           *output_stream << "; NEW SPEED FACTOR5: " << factor << new_line;
+           *output_stream << "; NEW SPEED: " << Fxy * factor << new_line;
+
+           *output_stream << "G1";
+           writeFXYZE(Velocity(Fxy * factor), x, y, z, e3, feature);
+        } else {
+           *output_stream << "G1";
+           writeFXYZE(speed, x, y, z, e3, feature);
+        }
 
         // Calulate Fxy speed if not already known
         if (Fxy == 0) {
-            Fxy = 60 * effectiveSpeed (cp1, x, y, 0, speed);
+            Fxy = effectiveSpeed (cp1, x, y, 0, speed);
            *output_stream << "; Fxy is: " << Fxy << new_line;
         }
 
@@ -1198,16 +1258,43 @@ void GCodeExport::writeFXYZE(const Velocity& speed, const int x, const int y, co
 
 double GCodeExport::effectiveSpeed(const Point3& cp1, const int x, const int y, const double e, const Velocity &speed)
 {
-    double effective_speed;
+   double effective_speed;
 
-    effective_speed = speed * sqrt(( (INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y))) / ((INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y)) + (e) * (e)));
+   double dx, dy, de;
+ 
+   dx = INT2MM(x) - INT2MM(cp1.x);
+   dy = INT2MM(y) - INT2MM(cp1.y);
+   de = e;
 
-     *output_stream << "; speed : " << speed << new_line;
-     *output_stream << "; e_delta, x, y: " << e << ", " << INT2MM(x) - INT2MM(cp1.x) << ", " << INT2MM(y) - INT2MM(cp1.y) << new_line;
+   effective_speed = speed * sqrt((dx * dx + dy * dy) / (dx * dx + dy * dy + de * de));
+
+
+
+   // effective_speed = speed * sqrt(( (INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y))) / ((INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y)) + (e) * (e)));
+
+    *output_stream << "; speed : " << speed << new_line;
+    *output_stream << "; e_delta, x, y: " << e << ", " << INT2MM(x) - INT2MM(cp1.x) << ", " << INT2MM(y) - INT2MM(cp1.y) << new_line;
 
     return effective_speed;
 }
 
+
+
+double GCodeExport::totalSpeedFactor(const Point3& cp1, const int x, const int y, const double e)
+{
+   double total_speed_factor;
+
+   double dx, dy, de;
+ 
+   dx = INT2MM(x) - INT2MM(cp1.x);
+   dy = INT2MM(y) - INT2MM(cp1.y);
+   de = e;
+
+
+   total_speed_factor = sqrt( (dx * dx + dy * dy + de * de) / (dx * dx + dy * dy) );
+
+   return total_speed_factor;
+}
 
 
 /* 

@@ -419,6 +419,14 @@ private:
     double effectiveSpeed(const Point3& cp1, const int x, const int y, const double e, const Velocity &speed);
 
 
+ 
+    /*!
+     * Given the effective XY speed required, determine the TOTAL speed factor that we need to set
+     *
+    */
+    double totalSpeedFactor(const Point3& cp1, const int x, const int y, const double e);
+
+
 
    /*!
      * Write the F, X, Y, Z and E value (if they are not different from the last)
