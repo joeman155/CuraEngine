@@ -115,6 +115,7 @@ private:
     std::string new_line;
 
     double premove_extrude;    // Amount of material we have extruded BEFORE moving extruder
+    double Fxy;                // Equivalent XY Speed - Used to ensure we have constant speed.
     int    finishing_up;       // Are we? (1) or are we not (0) extruding...
     double current_e_value; //!< The last E value written to gcode (in mm or mm^3)
     double current_e_value_abs; // This is like current_e_value, EXCEPT that it isn't reset when current_e_value is reset.
@@ -408,6 +409,14 @@ private:
      * It updates \ref GCodeExport::currentPosition, \ref GCodeExport::current_e_value and \ref GCodeExport::currentSpeed
      */
     void writeFXYZE(const Velocity& speed, const int x, const int y, const int z, const double e, const PrintFeatureType& feature);
+
+    /*!
+     * Calculate EFFECTIVE lateral speed
+     * 
+     * Returns speed in mm/second
+     *
+     */
+    double effectiveSpeed(const Point3& cp1, const int x, const int y, const double e, const Velocity &speed);
 
 
 

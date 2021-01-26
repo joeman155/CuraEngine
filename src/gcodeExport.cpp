@@ -45,6 +45,7 @@ GCodeExport::GCodeExport()
 
     premove_extrude= 0; // Amount of material extruded in PRE-MOVE. This is also used to identify is pre-extrude
                         // has already occured and is used to work out how much LESS to extrude at the end.
+    Fxy            = 0; // A value of zero means we haven't yet calculated it.
     current_e_value = 0;
     current_e_value_abs = 0;
     current_extruder = 0;
@@ -923,8 +924,18 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          // way to go, we just keep extruding amount required at each path.
          double ext_move = current_e_value + e_delta;
 
+         // Get position BEFORE move
+         Point3 cp1 = currentPosition;
+  
          *output_stream << "G1";
          writeFXYZE(speed, x, y, z, ext_move, feature);
+
+         // Calulate Fxy speed if not already known
+         if (Fxy == 0) {
+            Fxy = 60 * effectiveSpeed (cp1, x, y, e_delta, speed);
+            *output_stream << "; Fxy is: " << Fxy << new_line;
+         }
+
      } 
      else if (next_distance_remaining > 0 && INT2MM(next_distance_remaining) < extruder_distance && total_distance_remaining > extruder_distance)
      {
@@ -947,8 +958,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
         double e_total = e_delta + e3_next; // TOTAL amount of material to extrude from this move to the end.
-        double e3 = e_total - premove_extrude;
-        double t_extrude = e3 / despeed;
+        double e_change = e_total - premove_extrude;
+        double t_extrude = e_change / despeed;
         // Here, we have already PRE extruded premove_extrude...so we deduct that... then we divide by speed 
         // So we know how much TIME must be spent
  
@@ -970,16 +981,25 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         double x3 = cp.x + (x - cp.x) * t_extrude / t0;
         double y3 = cp.y + (y - cp.y) * t_extrude / t0;
         double z3 = cp.z + (z - cp.z) * t_extrude / t0;
-        e3 = current_e_value + e3;
+        double e3 = current_e_value + e_change;
 
         // We are deliberately removing the additional primed material from the end....because we don't want to
         // extrude more than we were meant to!
         // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
         // double e3 = new_e_value - premove_extrude + e3_next;
 
+         // Get position BEFORE move
+         Point3 cp1 = currentPosition;
+ 
         *output_stream <<  "; Last Extrude..." << new_line;
         *output_stream << "G1";
         writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+        // Calulate Fxy speed if not already known
+        if (Fxy == 0) {
+            Fxy = 60 * effectiveSpeed (cp1, x, y, e_change, speed);
+           *output_stream << "; Fxy is: " << Fxy << new_line;
+        }
 
         // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
         *output_stream << "G1";
@@ -1008,23 +1028,44 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
            double e3 = new_e_value;   // We still want the E value to be the same at the end. 
+           double e_change = new_e_value - current_e_value;
   
+           // Get position BEFORE move
+           Point3 cp1 = currentPosition;
+
            *output_stream << "; Last Extrude...." << new_line;
            *output_stream << "G1";
            writeFXYZE(speed, x3, y3, z3, e3, feature);
+
+           // Calulate Fxy speed if not already known
+           if (Fxy == 0) {
+              Fxy = 60 * effectiveSpeed (cp1, x, y, e_change, speed);
+              *output_stream << "; Fxy is: " << Fxy << new_line;
+           }
+
         }
 
+
+        // Get position BEFORE move
+        Point3 cp1 = currentPosition;
 
         // Now just move the remainder of the distance (no extrusion...i.e. same extrusion value)
         double e3 = current_e_value;
         *output_stream << "G1";
         writeFXYZE(speed, x, y, z, e3, feature);
 
+        // Calulate Fxy speed if not already known
+        if (Fxy == 0) {
+            Fxy = 60 * effectiveSpeed (cp1, x, y, 0, speed);
+           *output_stream << "; Fxy is: " << Fxy << new_line;
+        }
+
          
         // We only want to finish up if we are indeed on the LAST move.
         if (next_distance_remaining <= 0)
         {
           premove_extrude = 0;
+          Fxy = 0;
           *output_stream << "; Finished up. next_distance_remaining: " << next_distance_remaining << new_line;
         }
         else
@@ -1150,6 +1191,21 @@ void GCodeExport::writeFXYZE(const Velocity& speed, const int x, const int y, co
       // Under the limit...so generate code as usual.
       GCodeExport::writeFXYZEpart(speed, x, y, z, e, feature);
     }
+}
+
+
+
+
+double GCodeExport::effectiveSpeed(const Point3& cp1, const int x, const int y, const double e, const Velocity &speed)
+{
+    double effective_speed;
+
+    effective_speed = speed * sqrt(( (INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y))) / ((INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y)) + (e) * (e)));
+
+     *output_stream << "; speed : " << speed << new_line;
+     *output_stream << "; e_delta, x, y: " << e << ", " << INT2MM(x) - INT2MM(cp1.x) << ", " << INT2MM(y) - INT2MM(cp1.y) << new_line;
+
+    return effective_speed;
 }
 
 
@@ -1545,7 +1601,7 @@ void GCodeExport::disEngageMotor(int x, int y)
 
    log("Doing Motor Dis-engage...\n");
 
-   double angle_offset = 45;    // # of degrees that the Auger is ahead of stepper motor points
+   double angle_offset = 56;    // # of degrees that the Auger is ahead of stepper motor points
    // double e_per_revolution = M_PI * 11.0000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
    // double e_per_revolution = M_PI * 10.9000; // Did 10 rotations for E340 So 1 rev is E34. (Close to M_PI * 11...but not quite)
    // double e_per_revolution = 34.17335;   // Determined by trial and error.
