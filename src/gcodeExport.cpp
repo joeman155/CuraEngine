@@ -1259,14 +1259,7 @@ double GCodeExport::effectiveSpeed(const Point3& cp1, const int x, const int y, 
 
    effective_speed = speed * sqrt((dx * dx + dy * dy) / (dx * dx + dy * dy + de * de));
 
-
-
-   // effective_speed = speed * sqrt(( (INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y))) / ((INT2MM(x) - INT2MM(cp1.x)) * (INT2MM(x) - INT2MM(cp1.x)) + (INT2MM(y) - INT2MM(cp1.y)) * (INT2MM(y) - INT2MM(cp1.y)) + (e) * (e)));
-
-    *output_stream << "; speed : " << speed << new_line;
-    *output_stream << "; e_delta, x, y: " << e << ", " << INT2MM(x) - INT2MM(cp1.x) << ", " << INT2MM(y) - INT2MM(cp1.y) << new_line;
-
-    return effective_speed;
+   return effective_speed;
 }
 
 
