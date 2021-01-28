@@ -1006,7 +1006,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            Point3 cp1 = currentPosition;
-           double factor = totalSpeedFactor (cp1, x3, y3, 0);
+           double factor = totalSpeedFactor (cp1, x3, y3, e_change);
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
