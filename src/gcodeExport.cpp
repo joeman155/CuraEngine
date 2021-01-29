@@ -851,9 +851,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double despeed = e_delta / t0; // mm/second
       Velocity espeed = Velocity(despeed);
 
-
-*output_stream << "; new_e_value: " << new_e_value << new_line;
-
+// *output_stream << "; E_delta: " <<  e_delta << new_line;
+// *output_stream << "; new_e_value: " << new_e_value << new_line;
 // *output_stream << "; diff_length (First Move - mm): " << diff_length << new_line;
 // *output_stream << "; Fxy (Effective XY Speed - mm/sec): " << Fxy << new_line;
 // *output_stream << "; total_distance_remaining (Whole Path - mm): " << total_distance_remaining << new_line;
@@ -976,18 +975,18 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // extrude now...so we don't in future moves. We assume E is proportional to distance travelled to calculate next remaining e values.
         double e3_next = e_delta * (INT2MM(next_distance_remaining) / diff_length);
 
-*output_stream << "; e3_next: " << e3_next << new_line;
+// *output_stream << "; e_delta: " <<  e_delta << new_line;
+// *output_stream << "; next_distance_remaining: " << next_distance_remaining  << new_line;
+// *output_stream << "; diff_length: " << diff_length  << new_line;
+// *output_stream << "; e3_next: " << e3_next << new_line;
 
 if (new_e_value < current_e_value) {
   *output_stream << "; OHNO. This should never happen." << new_line;
 }
       
         double e_total;
-        e_total = e_delta + e3_next;
-
-*output_stream << "; e_delta:  " << e_delta << new_line;
-double e_a = new_e_value - current_e_value;
-*output_stream << "; e_a:  " << e_a << new_line;
+        e_total = e_delta + e3_next - premove_extrude;
+        // We remove premove_extrude, because we still have some powder coming out AFTER this...
 
 
         double t_extrude = e_total / despeed;
@@ -1054,7 +1053,7 @@ double e_a = new_e_value - current_e_value;
         // 
 
 
-        // Only run code here if we still need to extrude.
+        // Only run code here if we still need to extrude AND no more moves.
         if (total_distance_remaining > extruder_distance)
         {
            // We need to work out WHERE to extrude up until ... within this move ...
@@ -1064,9 +1063,9 @@ double e_a = new_e_value - current_e_value;
            double x3 = cp.x + (x - cp.x) * t3 / t0;
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
-           double e3 = new_e_value;   // We still want the E value to be the same at the end. 
-           // double e_change = new_e_value - current_e_value;
-           double e_change = e_delta;
+           double e3 = new_e_value - premove_extrude;   // We remove the premove-extrude, because we have to compensate for 
+                                                        // addtional pre-move extrude at beginning
+           double e_change = e3 - current_e_value;
   
 
            *output_stream << "; Last Extrude...." << new_line;

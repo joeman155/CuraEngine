@@ -1674,7 +1674,7 @@ void LayerPlan::writeGCode(GCodeExport& gcode)
 // JOE
 // Calculate distance remaining in Polygon
 int distance_remaining = -1;
-int xx, yy;
+unsigned long xx, yy;
 int last_move;
 if (path.points.size() > 0 ) 
 {
@@ -1683,14 +1683,14 @@ if (path.points.size() > 0 )
    for (unsigned int p_idx = point_idx; p_idx < path.points.size()-1; p_idx++) 
    {
       // Convert from microns to mm...so we don't exceed max value of int
-      xx = (path.points[p_idx].X - path.points[p_idx+1].X)/10;
-      yy = (path.points[p_idx].Y - path.points[p_idx+1].Y)/10 ;
-      distance_remaining = distance_remaining + pow(xx * xx + yy * yy, 0.5);
+      xx = (path.points[p_idx].X - path.points[p_idx+1].X);
+      yy = (path.points[p_idx].Y - path.points[p_idx+1].Y) ;
+      distance_remaining = distance_remaining + (int) pow(xx * xx + yy * yy, 0.5);
    }
 }
 
 // Convert back to microns. Yes, we do lose some precision due to rounding, but we hope this will be minimal.
-distance_remaining = distance_remaining * 10;  // Convert back to microns.
+distance_remaining = distance_remaining;  // Convert back to microns.
 
 
 log("At Point %d (out of %d) Distance remaining: %f\n", point_idx, path.points.size(), distance_remaining);
