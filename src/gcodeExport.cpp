@@ -896,13 +896,17 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          }
          else
          {
+            // Calculate amount to extrude on latter moves
+            double e3_next = e_delta * (INT2MM(next_distance_remaining) / diff_length);
+
+            // Grand total on amount to extrude
+            premove_extrude = e_delta + e3_next;
 
             // First Move (E only, no x, y)
-            double e1 = new_e_value;
-            premove_extrude = new_e_value - current_e_value;
+            double e1 = current_e_value + premove_extrude;
  
             // Calculate amount of time spent extruding this very small amount of powder
-            double t_spent =  (new_e_value - current_e_value) / despeed;
+            double t_spent =  premove_extrude / despeed;
 
             // Calculate amount of time to wait for powder to hit the plate.
             double t_remaining = extruder_latency - t_spent;
