@@ -852,6 +852,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       Velocity espeed = Velocity(despeed);
 
 
+*output_stream << "; new_e_value: " << new_e_value << new_line;
 
 // *output_stream << "; diff_length (First Move - mm): " << diff_length << new_line;
 // *output_stream << "; Fxy (Effective XY Speed - mm/sec): " << Fxy << new_line;
@@ -929,23 +930,28 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // The NEXT move after this is greater than extruder_latency, which means we don't have to 
         // worry about finishing the whole "move" this time. THIS IS EASY CASE
 
-        // Second Move (E and x and y)
+        // Second, 3rd.... Move (E and x and y)
 
-        // We are already primed ahead of the actual amount we want to extrude...but because we have a long
-        // way to go, we just keep extruding amount required at each path.
-        double ext_move = current_e_value + e_delta;
+        // We just want to extrude the amount to keep it fully primed. IT is already primed...we are just
+        // topping up...as it falls out the bottom
+
+
+        double e_change = e_delta; // We know we have lots more to extrude in latter moves... so we simply 
+                                   // want to top up what is used in this move.
+        double e3 = current_e_value + e_change;
+
 
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            Point3 cp1 = currentPosition;
-           double factor = totalSpeedFactor (cp1, x, y, e_delta);
+           double factor = totalSpeedFactor (cp1, x, y, e_change);
 
            *output_stream << "G1";
-           writeFXYZE(Velocity(Fxy * factor), x, y, z, ext_move, feature);
+           writeFXYZE(Velocity(Fxy * factor), x, y, z, e3, feature);
 
         } else {
           *output_stream << "G1";
-          writeFXYZE(speed, x, y, z, ext_move, feature);
+          writeFXYZE(speed, x, y, z, e3, feature);
         }
 
      } 
@@ -966,12 +972,25 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
 
 
         // Calculate theoretical extrude amount in  REMAINING Moves (note PLURAL HERE)
+        // We need this, because by the time we finish extrusion, we want the E value to be equal to what the E value is at the END... i.e. we prematurely 
+        // extrude now...so we don't in future moves. We assume E is proportional to distance travelled to calculate next remaining e values.
         double e3_next = e_delta * (INT2MM(next_distance_remaining) / diff_length);
 
+*output_stream << "; e3_next: " << e3_next << new_line;
 
-        double e_total = e_delta + e3_next; // TOTAL amount of material to extrude from this move to the end.
-        double e_change = e_total - premove_extrude;
-        double t_extrude = e_change / despeed;
+if (new_e_value < current_e_value) {
+  *output_stream << "; OHNO. This should never happen." << new_line;
+}
+      
+        double e_total;
+        e_total = e_delta + e3_next;
+
+*output_stream << "; e_delta:  " << e_delta << new_line;
+double e_a = new_e_value - current_e_value;
+*output_stream << "; e_a:  " << e_a << new_line;
+
+
+        double t_extrude = e_total / despeed;
         // Here, we have already PRE extruded premove_extrude...so we deduct that... then we divide by speed 
         // So we know how much TIME must be spent
  
@@ -993,12 +1012,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         double x3 = cp.x + (x - cp.x) * t_extrude / t0;
         double y3 = cp.y + (y - cp.y) * t_extrude / t0;
         double z3 = cp.z + (z - cp.z) * t_extrude / t0;
-        double e3 = current_e_value + e_change;
-
-        // We are deliberately removing the additional primed material from the end....because we don't want to
-        // extrude more than we were meant to!
-        // We had to extrude some of this material early on WITHOUT move to PD...but now we pay it back.
-        // double e3 = new_e_value - premove_extrude + e3_next;
+        double e3 = current_e_value + e_total;
 
  
         *output_stream <<  "; Last Extrude..." << new_line;
@@ -1006,7 +1020,7 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
         // If we already have XY speed, then we want to ensure remaining moves have speed enforced
         if (Fxy > 0) {
            Point3 cp1 = currentPosition;
-           double factor = totalSpeedFactor (cp1, x3, y3, e_change);
+           double factor = totalSpeedFactor (cp1, x3, y3, e_total);
 
            *output_stream << "G1";
            writeFXYZE(Velocity(Fxy * factor), x3, y3, z3, e3, feature);
@@ -1051,7 +1065,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
            double y3 = cp.y + (y - cp.y) * t3 / t0;
            double z3 = cp.z + (z - cp.z) * t3 / t0;
            double e3 = new_e_value;   // We still want the E value to be the same at the end. 
-           double e_change = new_e_value - current_e_value;
+           // double e_change = new_e_value - current_e_value;
+           double e_change = e_delta;
   
 
            *output_stream << "; Last Extrude...." << new_line;
