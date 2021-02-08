@@ -116,9 +116,17 @@ private:
 
     double premove_extrude;    // Amount of material we have extruded BEFORE moving extruder
     double Fxy;                // Equivalent XY Speed - Used to ensure we have constant speed.
+    int e_speed_step;          // The EXTRUSION speed step we are at. i.e. how many steps BELOW the main speed
+    int m_speed_step;          // The MOVE (x,y) speed step we are at. i.e. how many steps BELOW the main speed
+    int speed_step_count;      // How many steps
+    double step_min_speed;     // Minimum speed.
+    double step_increment;     // How much to increment speed by each step
+    int    step_direction;     // 1 = Going up. -1 = Going Down.
+    int    step_count;         // # of steps taken.
     int    finishing_up;       // Are we? (1) or are we not (0) extruding...
     double current_e_value; //!< The last E value written to gcode (in mm or mm^3)
     double current_e_value_abs; // This is like current_e_value, EXCEPT that it isn't reset when current_e_value is reset.
+    double travel_dist_since_step;  // Distance since last speed step change
 
     // flow-rate compensation
     double current_e_offset; //!< Offset to compensate for flow rate (mm or mm^3)
@@ -417,6 +425,84 @@ private:
      *
      */
     double effectiveSpeed(const Point3& cp1, const int x, const int y, const double e, const Velocity &speed);
+
+
+    /*!
+     * rampDistance
+     * 
+     * Calculate the distance to ramp up or ramp down.
+     */
+    double rampDistance(int speed_step_count, int step_increment, double extruder_distance, const Velocity &speed);
+
+
+
+    /*!
+     * p_speed_step - Speed step at which we extrude
+     * q_speed_step - Speed step at which we move extruder
+     *
+     * We are wantint to keep in step with what is STILL falling out...q_speed_step
+     * BUT... we want to speed up the extrusion of material.... hence p_speed_step
+     *
+     * Essentially, we need to extrude at an increased rate of p_factor / q_factor
+     *
+     * If we don't want to finish up at the end, then we set final_move = 0
+     *
+    */
+    double extrudeBit(double extruder_distance, int p_e_speed_step, int p_m_speed_step, int x, int y, int z, double e, const Velocity &speed, const PrintFeatureType& feature, 
+                      int final_move, double e_d, double e_delta);
+
+
+    /*!
+     * maxSteps
+     *
+     * Calculate maximum number of steps we can do in this move.
+     *
+    */
+    int maxSteps(int step_direction, double dist_remaining, int speed_step_count, int step_increment, double extruder_distance, const Velocity &speed, int speed_step);
+
+
+
+    /*!
+     * rampUpDownExtrude
+     *
+     * This is the function that handles all ramps up, and down...or none at all.
+     *
+    */
+    double rampUpDownExtrude(double dist_remaining, int next_distance_remaining, double total_distance_remaining, double extruder_distance, const Velocity &speed,
+                             const int x, const int y, const int z, const double e, const PrintFeatureType& feature);
+
+
+    /*!
+     * rampUpExtrude
+     *
+     * Create mini steps...as we ramp up This is run when we have a long stretch...and we want to split the stretch into small pieces
+     * as we INCREASE the speed.
+     *
+    */
+    double rampUpExtrude(double dist_remaining, int next_distance_remaining, double total_distance_remaining, double extruder_distance, const Velocity &speed,
+                        const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta);
+
+
+
+    /*!
+     * getExtrudeDistance
+     *
+     * Given the speed_step #, determine the extruder distance
+     *
+    */
+     double getExtrudeDistance (double extruder_distance, int speed_step, const Velocity &speed);
+
+
+    /*!
+     * rampDownExtrude
+     *
+     * Create mini steps...as we ramp down. This is run when we have a long stretch...and we want to split the stretch into small pieces
+     * as we REDUCE the speed.
+     *
+    */
+    double rampDownExtrude(double dist_remaining, int next_distance_remaining, double extruder_distance, const Velocity &speed,
+                           const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta);
+
 
 
  
