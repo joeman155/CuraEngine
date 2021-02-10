@@ -864,8 +864,8 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       double despeed = e_delta / t0; // mm/second
       // Velocity espeed = Velocity(despeed);
 
-// *output_stream << "; E_delta: " <<  e_delta << new_line;
-// *output_stream << "; new_e_value: " << new_e_value << new_line;
+*output_stream << "; E_delta: " <<  e_delta << new_line;
+*output_stream << "; new_e_value: " << new_e_value << new_line;
 // *output_stream << "; diff_length (First Move - mm): " << diff_length << new_line;
 // *output_stream << "; Fxy (Effective XY Speed - mm/sec): " << Fxy << new_line;
 // *output_stream << "; total_distance_remaining (Whole Path - mm): " << total_distance_remaining << new_line;
@@ -1388,7 +1388,7 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
         e_speed_step--;
      } else {   // We continue to extrude at given speed. Nothing else to do here...
      }
-     new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, e, speed, feature, 1, e_d, e_delta, next_distance_remaining);
+     new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, e, speed, feature, 0, e_d, e_delta, next_distance_remaining);
 
      return new_dist_remaining;   // No point continuing on, because we have finished this "run"
   } 
@@ -1477,7 +1477,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
      } else {   // We continue to extrude at given speed.
         // Continue to extrude...
      }
-     new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, e, speed, feature, 1, e_d, e_delta, next_distance_remaining);
+     new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, e, speed, feature, 0, e_d, e_delta, next_distance_remaining);
 
 
      return new_dist_remaining;   // No point continuing on, because we have finished this "run"
@@ -1568,34 +1568,38 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
 
 // TODO We should probably pass a parameter to this function e_delta/distance  ...as an unchanging constant as we split up the line
 // This will remove problems with distance parameter above.
-*output_stream << "; 1" << new_line;
    } else if (total_distance_remaining > getExtrudeDistance (extruder_distance, p_m_speed_step, speed) && 
               INT2MM(next_distance_remaining) <= 0) {
+      // WE ARE FINIShING OFF EXTRUDING - We WANT TO finish up exactly where the last E value should get us.
       // We want to ensure we have just enough powder left in outlet for last bit
-      e_change = e_delta - premove_extrude;
+
+// WE ARE EXTRUDING PAST THE POINT . For the first path it should finish at 430.83...but we finish at about 437.... 
+//  Everything time we do an extrude, we update current_e_value and so we are adding the DIFF to a value that 
+//  has already been advanced during ramping UP. I would have expected it to go back down during RAMP DOwn....
+//
+// MORE INVESTIGATION REQUIRED.
+//
+// So, while 
+//       e_change = e - current_e_value - premove_extrude;
       extruder_move = total_distance_remaining - getExtrudeDistance (extruder_distance, p_m_speed_step, speed);
-*output_stream << "; 2" << new_line;
+      e_change = extruder_move * e_d;
+
    } else if (total_distance_remaining > getExtrudeDistance (extruder_distance, p_m_speed_step, speed) && 
               INT2MM(next_distance_remaining) > 0 &&
               INT2MM(next_distance_remaining) < getExtrudeDistance (extruder_distance, p_m_speed_step, speed) ) {
 
 
-// TODO This calc is wrong... we NEED to take into account E value in remaining moves.
-      // We want to ensure we have just enough powder left in outlet for last bit
-      e_change = e_delta - premove_extrude;
       extruder_move = total_distance_remaining - getExtrudeDistance (extruder_distance, p_m_speed_step, speed);
-*output_stream << "; 2.5" << new_line;
+      e_change = extruder_move * e_d;
    } else if (total_distance_remaining < getExtrudeDistance (extruder_distance, p_m_speed_step, speed)) {
       // Not ramping up or ramping down, so we just move the WHOLE distance.
       extruder_move = remaining_distance;
       e_change = 0;    // No more extrusion...
 
-*output_stream << "; 3" << new_line;
    } else {
       // All other scenarios....Not ramping up or ramping down, so we just move the WHOLE distance.
       extruder_move = remaining_distance;
       e_change = e_delta;
-*output_stream << "; 4" << new_line;
    }
 
 
@@ -1619,7 +1623,7 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
         // Distance the extruder moves  in x, y plane
         distance_moved = INT2MM(sqrt ((x3 - cp1.x) * (x3 - cp1.x) + (y3 - cp1.y) * (y3 - cp1.y)));
       
-//        *output_stream << "; xb1" << new_line;
+        // *output_stream << "; xb1" << new_line;
         *output_stream << "G1";
         writeFXYZE(Velocity(mfactor * Fxy * factor), x3, y3, z3, current_e_value + e_change, feature);
 
@@ -1634,8 +1638,9 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
            mfactor = (speed - m_speed_step * step_increment) / speed;  // No change in speed from last time.
        
 // TODO - the line below looks like shit.
-           e_change = remaining_distance  * e_d;
-//           *output_stream << "; xb2." << new_line;
+           // e_change = remaining_distance  * e_d;
+           e_change = 0;
+          //  *output_stream << "; xb2." << new_line;
            *output_stream << "G1";
            writeFXYZE(Velocity(mfactor * Fxy * factor), x, y, z, current_e_value + e_change, feature);
 
@@ -1644,7 +1649,7 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
    } else {
 
         // Just ONE MOVE
-//        *output_stream << "; xb1." << new_line;
+        // *output_stream << "; xb1." << new_line;
         *output_stream << "G1";
         e_change = remaining_distance  * e_d;
         factor = totalSpeedFactor (cp1, x, y, e_change);
