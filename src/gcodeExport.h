@@ -449,7 +449,7 @@ private:
      *
     */
     double extrudeBit(double extruder_distance, int p_e_speed_step, int p_m_speed_step, int x, int y, int z, double e, const Velocity &speed, const PrintFeatureType& feature, 
-                      int final_move, double e_d, double e_delta);
+                      int final_move, double e_d, double e_delta, int next_distance_remaining);
 
 
     /*!
