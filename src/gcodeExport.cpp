@@ -1475,7 +1475,7 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
    double extruder_move, remaining_distance;   // Keeping track of extruder moves in X, Y plane
    double distance_moved;
    double e_change;   // Amount we actually extrude
-
+   double factor;
 
 
    // Distance the extruder moves  in x, y plane
@@ -1539,8 +1539,6 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
    }
 
 
-   // Still need to ensure we get the right speed factor
-   double factor = totalSpeedFactor (cp1, x, y, e_delta);
 
 
    // Determine if this is TWO moves, or one move
@@ -1559,7 +1557,10 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
         // Distance the extruder moves  in x, y plane
         distance_moved = INT2MM(sqrt ((x3 - cp1.x) * (x3 - cp1.x) + (y3 - cp1.y) * (y3 - cp1.y)));
       
-        // *output_stream << "; xb1" << new_line;
+        // Still need to ensure we get the right speed factor
+        factor = totalSpeedFactor (cp1, x3, y3, e_change);
+
+
         *output_stream << "G1";
         writeFXYZE(Velocity(mfactor * Fxy * factor), x3, y3, z3, current_e_value + e_change, feature);
 
@@ -1573,10 +1574,7 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
            // SECOND MOVE
            mfactor = (speed - m_speed_step * step_increment) / speed;  // No change in speed from last time.
        
-// TODO - the line below looks like shit.
-           // e_change = remaining_distance  * e_d;
            e_change = 0;
-          //  *output_stream << "; xb2." << new_line;
            *output_stream << "G1";
            writeFXYZE(Velocity(mfactor * Fxy * factor), x, y, z, current_e_value + e_change, feature);
 
@@ -1585,7 +1583,6 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
    } else {
 
         // Just ONE MOVE
-        // *output_stream << "; xb1." << new_line;
         *output_stream << "G1";
         e_change = remaining_distance  * e_d;
         factor = totalSpeedFactor (cp1, x, y, e_change);
