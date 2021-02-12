@@ -891,10 +891,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
          step_direction = 1;  // We are ramping up.
 
 
-         *output_stream << "; speed: " << speed << new_line;
-         *output_stream << "; speed_step_count: " << speed_step_count << new_line;
-
-
 
          // Include some useful info on type of path
          if (next_distance_remaining > 0)  {
@@ -1341,7 +1337,7 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
 
   // Get number of steps we can do in this case.
   extrude_splits = std::min(m_speed_step, max_splits);
-  *output_stream << "; RAMP UP - extrude_splits: " << extrude_splits << new_line;
+  // *output_stream << "; RAMP UP - extrude_splits: " << extrude_splits << new_line;
 
   int initial_speed_step = e_speed_step;
   for (int step = e_speed_step - 1; step >= (initial_speed_step - extrude_splits); step--) {
@@ -1432,7 +1428,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
 
   // Get number of steps we can do in this case.
   extrude_splits = std::min(speed_step_count - m_speed_step, max_splits);
-  *output_stream << "; RAMP DOWN - extrude_splits: " << extrude_splits << new_line;
+  // *output_stream << "; RAMP DOWN - extrude_splits: " << extrude_splits << new_line;
 
   int initial_speed_step = m_speed_step;
   for (int step = m_speed_step+1; step <= (extrude_splits - initial_speed_step); step++) {
@@ -1498,25 +1494,14 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
       // Update travel_dst_since_step
       travel_dist_since_step = travel_dist_since_step + extruder_move;
 
-      *output_stream << "; extruder move: " << extruder_move << new_line;
       // Calculate new delta E
       e_change = getExtrudeDistance (extruder_distance, p_e_speed_step, speed) * e_d;
 
-// TODO We should probably pass a parameter to this function e_delta/distance  ...as an unchanging constant as we split up the line
-// This will remove problems with distance parameter above.
    } else if (total_distance_remaining > getExtrudeDistance (extruder_distance, p_m_speed_step, speed) && 
               INT2MM(next_distance_remaining) <= 0) {
       // WE ARE FINIShING OFF EXTRUDING - We WANT TO finish up exactly where the last E value should get us.
       // We want to ensure we have just enough powder left in outlet for last bit
 
-// WE ARE EXTRUDING PAST THE POINT . For the first path it should finish at 430.83...but we finish at about 437.... 
-//  Everything time we do an extrude, we update current_e_value and so we are adding the DIFF to a value that 
-//  has already been advanced during ramping UP. I would have expected it to go back down during RAMP DOwn....
-//
-// MORE INVESTIGATION REQUIRED.
-//
-// So, while 
-//       e_change = e - current_e_value - premove_extrude;
       extruder_move = total_distance_remaining - getExtrudeDistance (extruder_distance, p_m_speed_step, speed);
       e_change = extruder_move * e_d;
 
