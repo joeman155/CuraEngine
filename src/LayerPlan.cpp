@@ -1675,11 +1675,9 @@ void LayerPlan::writeGCode(GCodeExport& gcode)
 // Calculate distance remaining in Polygon
 int distance_remaining = -1;
 unsigned long xx, yy;
-int last_move;
 if (path.points.size() > 0 ) 
 {
    distance_remaining = 0;
-   last_move = 0;
    for (unsigned int p_idx = point_idx; p_idx < path.points.size()-1; p_idx++) 
    {
       // Convert from microns to mm...so we don't exceed max value of int
@@ -1695,15 +1693,8 @@ distance_remaining = distance_remaining;  // Convert back to microns.
 
 log("At Point %d (out of %d) Distance remaining: %f\n", point_idx, path.points.size(), distance_remaining);
 
-// Work out if we on the last move
-if (point_idx == path.points.size() - 1) {
-    last_move = 1;
- } else {
-    last_move = xx;
- }
 
-                        // gcode.writeExtrusionX(path.points[point_idx], speed, path.getExtrusionMM3perMM(), path.config->type, update_extrusion_offset, distance_remaining);
-                        gcode.writeExtrusion(path.points[point_idx], speed, path.getExtrusionMM3perMM(), path.config->type, update_extrusion_offset, distance_remaining, last_move);
+                        gcode.writeExtrusion(path.points[point_idx], speed, path.getExtrusionMM3perMM(), path.config->type, update_extrusion_offset, distance_remaining);
                     }
                 }
             }

@@ -624,11 +624,9 @@ void GCodeExport::writeTravel(const Point& p, const Velocity& speed)
 {
     writeTravel(Point3(p.X, p.Y, current_layer_z), speed);
 }
-void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining, int last_move)
+void GCodeExport::writeExtrusion(const Point& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining)
 {
-    writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining, last_move);
-// *output_stream << "lm: " << last_move  << new_line;
-// *output_stream << "ndr: " << next_distance_remaining << new_line;
+    writeExtrusion(Point3(p.X, p.Y, current_layer_z), speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining);
 }
 
 void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
@@ -641,14 +639,14 @@ void GCodeExport::writeTravel(const Point3& p, const Velocity& speed)
     writeTravel(p.x, p.y, p.z + is_z_hopped, speed);
 }
 
-void GCodeExport::writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining, int last_move)
+void GCodeExport::writeExtrusion(const Point3& p, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature, bool update_extrusion_offset, int next_distance_remaining)
 {
     if (flavor == EGCodeFlavor::BFB)
     {
         writeMoveBFB(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature);
         return;
     }
-    writeExtrusion(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining, last_move);
+    writeExtrusion(p.x, p.y, p.z, speed, extrusion_mm3_per_mm, feature, update_extrusion_offset, next_distance_remaining);
 }
 
 void GCodeExport::writeMoveBFB(const int x, const int y, const int z, const Velocity& speed, double extrusion_mm3_per_mm, PrintFeatureType feature)
@@ -744,7 +742,7 @@ void GCodeExport::writeTravel(const coord_t& x, const coord_t& y, const coord_t&
 
 
 // JOE2
-void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset, int next_distance_remaining, int last_move)
+void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Velocity& speed, const double extrusion_mm3_per_mm, const PrintFeatureType& feature, const bool update_extrusion_offset, int next_distance_remaining)
 {
 
     // If current position == new position....no point creating a G-Code
