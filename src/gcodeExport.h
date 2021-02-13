@@ -449,7 +449,7 @@ private:
      *
     */
     double extrudeBit(double extruder_distance, int p_e_speed_step, int p_m_speed_step, int x, int y, int z, double e, const Velocity &speed, const PrintFeatureType& feature, 
-                      int final_move, double e_d, double e_delta, int next_distance_remaining);
+                      int final_move, double e_d, double e_delta, int next_distance_remaining, bool *finished);
 
 
     /*!
@@ -480,7 +480,7 @@ private:
      *
     */
     double rampUpExtrude(double dist_remaining, int next_distance_remaining, double total_distance_remaining, double extruder_distance, const Velocity &speed,
-                        const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta);
+                        const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished);
 
 
 
@@ -501,7 +501,7 @@ private:
      *
     */
     double rampDownExtrude(double dist_remaining, int next_distance_remaining, double extruder_distance, const Velocity &speed,
-                           const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta);
+                           const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished);
 
 
 
