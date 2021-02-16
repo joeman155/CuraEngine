@@ -1204,7 +1204,6 @@ double GCodeExport::rampUpDownExtrude(double dist_remaining, int next_distance_r
 
    // IF STILL some extruding...this will be cause ramping down isn't quite the activity we need to do just yet.
    // So we just Extrude some more at the CURRENT speed.
-   // if (finished == false) {
    while (finished == false) {
       new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, e, speed, feature, 1, e_d, e_delta, next_distance_remaining, &finished);
    }
@@ -1358,6 +1357,12 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
      step_direction = 2;       //  No more ramp up or down for this PATH
      return new_dist_remaining;
   }
+
+
+  // We want to deal with case where the next_remaining_distance is large, but not large enough for ramping down
+  // and we have a LARGE distance to travel this move... and if we start ramping down STRAIGHTAWAY...we will spend
+  // a significant amount of time at the SLOW speed...means SLOW PRINTS. i.e. we want to rampDown close to end so that
+  // when we have finished ramping down, we only have a few mm left.
 
 
 
