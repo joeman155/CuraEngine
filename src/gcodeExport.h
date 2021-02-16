@@ -448,8 +448,8 @@ private:
      * If we don't want to finish up at the end, then we set final_move = 0
      *
     */
-    double extrudeBit(double extruder_distance, int p_e_speed_step, int p_m_speed_step, int x, int y, int z, double e, const Velocity &speed, const PrintFeatureType& feature, 
-                      int final_move, double e_d, double e_delta, int next_distance_remaining, bool *finished);
+    double extrudeBit(double extruder_distance, int p_e_speed_step, int p_m_speed_step, int x, int y, int z, const Velocity &speed, const PrintFeatureType& feature, 
+                      int final_move, double e_d, double cust_move, int next_distance_remaining, bool *finished);
 
 
     /*!
