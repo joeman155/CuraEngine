@@ -1328,7 +1328,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
 {
   int max_splits;                // Maximum # of steps we can do this move
   int extrude_splits;            // Number of steps we will actually do.
-  double move_contingency = 2;   // Clearance we give us from the end, so when we finish ramp down we aren't RIGHT ON THE END.
+  double move_contingency = 3;   // Clearance we give us from the end, so when we finish ramp down we aren't RIGHT ON THE END.
   double new_dist_remaining = dist_remaining;
 
   if (step_direction != -1) {
@@ -1408,7 +1408,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
   for (int step = m_speed_step+1; step <= (extrude_splits + initial_speed_step); step++) {
      e_speed_step = step;
    
-*output_stream << "; step = " << step << new_line;
+// *output_stream << "; step = " << step << new_line;
 
      // TODO - NEED TO CATER FOR SCENARIO WHERE WE FINISh OFF TRAVEL BEFORE WE DO THE SPLITS.
      new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, speed, feature, 0, e_d, 0, next_distance_remaining, finished);
@@ -1630,7 +1630,7 @@ int GCodeExport::maxSteps(int step_direction, double dist_remaining, int speed_s
 
    if (step_direction == 1) {  // Ramping UP
       if (speed_step > 0) {   // Only if we have more ramping up do we consider this...
-         for (int i = speed_step - 1; i >= 0; i--) {
+         for (int i = speed_step; i >= 0; i--) {
              pfactor = (speed - i * step_increment) / speed;
              dist = dist + extruder_distance * pfactor;
              if (dist > dist_remaining) {
@@ -1643,9 +1643,10 @@ int GCodeExport::maxSteps(int step_direction, double dist_remaining, int speed_s
    } else {
       // Going backawards
       if (speed_step < speed_step_count) {  // Only if we have more ramping down, do we consider this.
-         for (int i = speed_step + 1; i <= speed_step_count; i++) {
+         for (int i = speed_step; i <= speed_step_count; i++) {
             pfactor = (speed - i * step_increment) / speed;
              dist = dist + extruder_distance * pfactor;
+// *output_stream << "; Adding: " << extruder_distance * pfactor << ", TOTAL = " << dist << ", Comparing to :" << dist_remaining << new_line;
              if (dist > dist_remaining) {
                 break;
              }
