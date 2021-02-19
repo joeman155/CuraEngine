@@ -1599,8 +1599,8 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
            distance_moved = remaining_distance;
 
 
-           premove_extrude = 0;
-           Fxy = 0;
+//            premove_extrude = 0;
+//            Fxy = 0;
            *output_stream << "; Finished up. next_distance_remaining: " << next_distance_remaining << new_line;
            *finished = true;
 
@@ -1617,6 +1617,12 @@ double GCodeExport::extrudeBit(double extruder_distance, int p_e_speed_step, int
         *finished = true;
    }
 
+   
+   // IF we have finished == true AND no more distance after this, then it means we are finishing the path
+   if (*finished == true && next_distance_remaining <= 0) {
+      premove_extrude = 0;
+      Fxy = 0;
+   }
 
    return distance_moved;
 
