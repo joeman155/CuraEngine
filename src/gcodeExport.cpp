@@ -51,6 +51,7 @@ GCodeExport::GCodeExport()
     speed_step_count   = 0;    // Number of speed steps we have
     step_min_speed     = 2;    // Minimum speed in mm/sec
     step_increment     = 2;    // How much to increment speed by each step (mm/sec)
+    step_length        = 2;    // time in each step = step_length * extruder_latency
     step_direction     = 1;    // 1 = Going up... 
     travel_dist_since_step = 0; // 0 means we are ready to do ramp up or down. A value less than extruderDistance indicates we haven't done enough yet...to allow another ramp up or down.
     current_e_value = 0;
@@ -1098,7 +1099,7 @@ double GCodeExport::getExtrudeDistance (double extruder_distance, int speed_step
 
    pfactor = (speed - speed_step * step_increment) / speed;
 
-   double distance = extruder_distance * pfactor;
+   double distance = step_length * extruder_distance * pfactor;
 
    return distance;
 }
@@ -1223,18 +1224,8 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
   for (int step = e_speed_step - 1; step >= (initial_speed_step - extrude_splits); step--) {
      e_speed_step = step;
    
-     // TODO - NEED TO CATER FOR SCENARIO WHERE WE FINISh OFF TRAVEL BEFORE WE DO THE SPLITS.
      new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, speed, feature, 0, e_d, 0, next_distance_remaining, finished);
 
-
-     // Do work - generate the line
-     // TODO - Calculate the new extruder_distance..... since it is reduced based on pfactor
-     // TODO - Calculate the new E value (ratio of extruder_distance to diff_length x e_delta)
-     // TODO - Calculate the new speed (x by pfactor)
-     // TODO - Generate new X,Y,Z points   (ratio of extruder_distance to diff_length x Each component)
-     // TODO - Generate new G1 Code line
-
-  
      // If we are getting close to the end...at the point where we need to start reversing speed... we exit and signal that this
      // is what we need to start doing...
      if (step_direction == 1 && INT2MM(next_distance_remaining) + new_dist_remaining < rampDistance(speed_step_count, step_increment, extruder_distance, speed) ) {
@@ -1242,7 +1233,6 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
         break;
      }
   } 
-
 
 
              
@@ -1303,7 +1293,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
   // and we have a LARGE distance to travel this move... and if we start ramping down STRAIGHTAWAY...we will spend
   // a significant amount of time at the SLOW speed...means SLOW PRINTS. i.e. we want to rampDown close to end so that
   // when we have finished ramping down, we only have a few mm left.
-  if (dist_remaining + INT2MM(next_distance_remaining) > rampDistance(speed_step_count, step_increment, extruder_distance, speed)) {
+  if (dist_remaining + INT2MM(next_distance_remaining) > rampDistance(speed_step_count, step_increment, extruder_distance, speed) + move_contingency) {
       double custom_move = dist_remaining + INT2MM(next_distance_remaining) - rampDistance(speed_step_count, step_increment, extruder_distance, speed) - move_contingency;
       *output_stream << "; custom_move: " << custom_move << new_line;
       new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, speed, feature, 0, e_d, custom_move, next_distance_remaining, finished);
@@ -1311,10 +1301,7 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
 
 
   
-//JOE8
-
   // Get number of splits we can do in the remaining part of this move.
-  // TODO THIS IS WRONG AT PRESENT AS WE MIGHT HAVE MOVED SOME DISTANCE ABOVE!!
   max_splits = maxSteps(step_direction, new_dist_remaining, speed_step_count, step_increment, extruder_distance, speed, m_speed_step);
 
 
@@ -1346,25 +1333,11 @@ double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_rem
   int initial_speed_step = m_speed_step;
   for (int step = m_speed_step+1; step <= (extrude_splits + initial_speed_step); step++) {
      e_speed_step = step;
-   
-// *output_stream << "; step = " << step << new_line;
 
-     // TODO - NEED TO CATER FOR SCENARIO WHERE WE FINISh OFF TRAVEL BEFORE WE DO THE SPLITS.
      new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, speed, feature, 0, e_d, 0, next_distance_remaining, finished);
 
-     // We work out the speed fraction....so we can set reduced speed AND reduced E
-//     double pfactor = (speed - m_speed_step * step_increment) / speed;
-
-     // Do work - generate the line
-     // TODO - Calculate the new extruder_distance..... since it is reduced based on pfactor
-     // TODO - Calculate the new E value (ratio of extruder_distance to diff_length x e_delta)
-     // TODO - Calculate the new speed (x by pfactor)
-     // TODO - Generate new X,Y,Z points   (ratio of extruder_distance to diff_length x Each component)
-     // TODO - Generate new G1 Code line
   }
 
-
-//JOE9
   // IF we have finished ramping down, we make sure it is set that way.
   if (m_speed_step == speed_step_count) {
      step_direction = 2;   // So we don't do any more ramping down... This is not reset again until premove extrude is done.
@@ -1577,7 +1550,7 @@ int GCodeExport::maxSteps(int step_direction, double dist_remaining, int speed_s
       if (speed_step > 0) {   // Only if we have more ramping up do we consider this...
          for (int i = speed_step; i >= 0; i--) {
              pfactor = (speed - i * step_increment) / speed;
-             dist = dist + extruder_distance * pfactor;
+             dist = dist + step_length * extruder_distance * pfactor;
              if (dist > dist_remaining) {
                 break;
              }
@@ -1590,7 +1563,7 @@ int GCodeExport::maxSteps(int step_direction, double dist_remaining, int speed_s
       if (speed_step < speed_step_count) {  // Only if we have more ramping down, do we consider this.
          for (int i = speed_step; i <= speed_step_count; i++) {
             pfactor = (speed - i * step_increment) / speed;
-             dist = dist + extruder_distance * pfactor;
+             dist = dist + step_length * extruder_distance * pfactor;
 // *output_stream << "; Adding: " << extruder_distance * pfactor << ", TOTAL = " << dist << ", Comparing to :" << dist_remaining << new_line;
              if (dist > dist_remaining) {
                 break;
@@ -1615,7 +1588,7 @@ double GCodeExport::rampDistance(int speed_step_count, int step_increment, doubl
 
    for (int i = 0; i <= speed_step_count; i++) {
       pfactor = (speed - i * step_increment) / speed;
-      ramp_distance = ramp_distance + extruder_distance * pfactor;
+      ramp_distance = ramp_distance + step_length * extruder_distance * pfactor;
     }
 
    return ramp_distance;

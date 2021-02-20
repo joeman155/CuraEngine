@@ -121,6 +121,7 @@ private:
     int speed_step_count;      // How many steps
     double step_min_speed;     // Minimum speed.
     double step_increment;     // How much to increment speed by each step
+    int    step_length;        // This times extruder_latency = time spent at each STEP.
     int    step_direction;     // 1 = Going up. -1 = Going Down.
     int    step_count;         // # of steps taken.
     int    finishing_up;       // Are we? (1) or are we not (0) extruding...
