@@ -953,78 +953,11 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
       }  // End of test "premove_extrude == 0"
 
 
-     double dist_remaining = 0;
-
-     // See how we want to proceed with the G-Codes
-     if (INT2MM(next_distance_remaining) > extruder_distance)
-     {
-        // The NEXT move after this is greater than extruder_latency, which means we don't have to 
-        // worry about finishing the whole "move" this time. THIS IS EASY CASE
-
-        // Second, 3rd.... Move (E and x and y)
-
-        // We just want to extrude the amount to keep it fully primed. IT is already primed...we are just
-        // topping up...as it falls out the bottom
-
-
-        double e_change = e_delta; // We know we have lots more to extrude in latter moves... so we simply 
-                                   // want to top up what is used in this move.
-        double e3 = current_e_value + e_change;
-
-    
-        dist_remaining = diff_length;  // Track how much further we move INSIDE this move.
-        dist_remaining = rampUpDownExtrude(dist_remaining, next_distance_remaining, total_distance_remaining, extruder_distance, speed,
-                                           x, y, z, e3, feature);
-
-
-     } 
-     else if (next_distance_remaining > 0 && INT2MM(next_distance_remaining) < extruder_distance && total_distance_remaining > extruder_distance)
-     {
-
-        // Situation: Some movement(s) after this, (but less than extruder length). TOTAL distance to move requires SOME extrusion.
-        // 
-        // Considering JUST this move, possible scenarios are:-
-        //       a. This move < extruder_distance
-        //       b. This move > extruder_distance
-
-
-
-        // NOTE: There could be several more moves after this...but total movement of all these 
-        //       moves is under extruder_distance
-        //
-
-
-        double e_change = e_delta; // We know we have lots more to extrude in latter moves... so we simply 
-                                   // want to top up what is used in this move.
-        double e3 = current_e_value + e_change;
-
-    
-        dist_remaining = diff_length;  // Track how much further we move INSIDE this move.
-        dist_remaining = rampUpDownExtrude(dist_remaining, next_distance_remaining, total_distance_remaining, extruder_distance, speed,
-                                           x, y, z, e3, feature);
-
-     }
-     else  
-     {
-        // Possible scenarios are:-
-        // 1. No movement after this move.
-        //       a. This move < extruder_distance
-        //       b. This move > extruder_distance
-        // 
-        // 2. More movements after this... and TOTAL length to move < extrusion_distance. i.e. no more extrusion require.
-        // 
-
-        double e_change = e_delta; // We know we have lots more to extrude in latter moves... so we simply 
-                                   // want to top up what is used in this move.
-        double e3 = current_e_value + e_change;
-
-        dist_remaining = diff_length;  // Track how much further we move INSIDE this move.
-        dist_remaining = rampUpDownExtrude(dist_remaining, next_distance_remaining, total_distance_remaining, extruder_distance, speed,
-                                           x, y, z, e3, feature);
-
-
-     }
-
+     double dist_remaining = diff_length;
+     double e_change = e_delta; 
+     double e3 = current_e_value + e_change;
+     dist_remaining = rampUpDownExtrude(dist_remaining, next_distance_remaining, total_distance_remaining, extruder_distance, speed,
+                                        x, y, z, e3, feature);
 
 
    } 
