@@ -833,13 +833,6 @@ void GCodeExport::writeExtrusion(const int x, const int y, const int z, const Ve
    // new_e_value - current_e_vale > 0     - IF nothing to extrude... pointless.
    if (extruder_latency > 0 && new_e_value - current_e_value > 0) 
    {
-
-
-
-
-
-
-
       // Current Position
       Point3 cp = currentPosition;  // Record Current Position because currentPosition is overwritten
 
@@ -1121,23 +1114,20 @@ double GCodeExport::rampUpDownExtrude(double dist_remaining, int next_distance_r
    Point3 cp1 = currentPosition;
    distance = INT2MM(sqrt ((x - cp1.x) * (x - cp1.x) + (y - cp1.y) * (y - cp1.y)));
    e_delta = e - current_e_value;
-   e_d = e_delta / distance;    // Density of powder extrusion PER mm of distance...what we need to maintain on whole of
-                                // extrusion.
+   e_d = e_delta / distance;    // Density of powder extrusion PER mm of distance...what we need to maintain on whole of extrusion.
 
    new_dist_remaining = rampUpExtrude(new_dist_remaining, next_distance_remaining, total_distance_remaining, extruder_distance, speed,
-                                      x, y, z, e, feature, e_d, e_delta, &finished);
+                                      x, y, z, e, feature, e_d, &finished);
 
 
-
-
-   // IF there is still some extruding...this might because rampUpExtrude didn't think it should...and that rampDownExtrude should
+   // If there is still some extruding...this might because rampUpExtrude didn't think it should...and that rampDownExtrude should
    if (finished == false) {
       new_dist_remaining = rampDownExtrude(new_dist_remaining, next_distance_remaining, extruder_distance, speed,
-                                           x, y, z, e, feature, e_d, e_delta, &finished);
+                                           x, y, z, e, feature, e_d, &finished);
    }
 
 
-   // IF STILL some extruding...this will be cause ramping down isn't quite the activity we need to do just yet.
+   // If still some extruding...this will be cause ramping down isn't quite the activity we need to do just yet.
    // So we just Extrude some more at the CURRENT speed.
    while (finished == false) {
       new_dist_remaining = new_dist_remaining - extrudeBit(extruder_distance, e_speed_step, m_speed_step, x, y, z, speed, feature, 1, e_d, 0, next_distance_remaining, &finished);
@@ -1151,7 +1141,7 @@ double GCodeExport::rampUpDownExtrude(double dist_remaining, int next_distance_r
 
 
 double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remaining, double total_distance_remaining, double extruder_distance, const Velocity &speed,
-                                  const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished)
+                                  const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, bool *finished)
 {
   int max_splits;               // Maximum # of steps we can do this move
   int extrude_splits;           // Number of steps we will actually do.
@@ -1160,15 +1150,18 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
   // Assume not finished
   *finished = false;
 
+  // If we are not ramping up...then return.
   if (step_direction != 1) {    // We are only considering cases where we are Ramping up. So exit
      return new_dist_remaining;
   }
   
+  // If already ramped up...
   if (m_speed_step == 0) {      // Already ramped up....
      step_direction = -1;       // Any future ramping is DOWN... (though it might not be for a while)
      return new_dist_remaining;
   }
   
+  // If we are past point of where we have to start ramping down...
   if (total_distance_remaining <= rampDistance(speed_step_count, step_increment, extruder_distance, speed)) {
      // Already close to having to ramp down...so we don't try to ramp up.
      step_direction = -1;       // Any future ramping is DOWN ... and is likely to be for this move ... in latter code.
@@ -1250,7 +1243,7 @@ double GCodeExport::rampUpExtrude(double dist_remaining, int next_distance_remai
 
 
 double GCodeExport::rampDownExtrude(double dist_remaining, int next_distance_remaining, double extruder_distance, const Velocity &speed,
-                                    const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished)
+                                    const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, bool *finished)
 {
   int max_splits;                // Maximum # of steps we can do this move
   int extrude_splits;            // Number of steps we will actually do.

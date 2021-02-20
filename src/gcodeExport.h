@@ -481,7 +481,7 @@ private:
      *
     */
     double rampUpExtrude(double dist_remaining, int next_distance_remaining, double total_distance_remaining, double extruder_distance, const Velocity &speed,
-                        const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished);
+                        const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, bool *finished);
 
 
 
@@ -502,7 +502,7 @@ private:
      *
     */
     double rampDownExtrude(double dist_remaining, int next_distance_remaining, double extruder_distance, const Velocity &speed,
-                           const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, double e_delta, bool *finished);
+                           const int x, const int y, const int z, const double e, const PrintFeatureType& feature, double e_d, bool *finished);
 
 
 
